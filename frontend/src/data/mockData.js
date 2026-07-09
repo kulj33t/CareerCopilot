@@ -2,9 +2,9 @@
 // Keep all strings plain — no platform-specific characters in source.
 
 export const mockUser = {
-  name: 'Piyush Thakur',
-  initials: 'PT',
-  email: 'piyush@college.edu',
+  name: 'Kuljeet Singh            ',
+  initials: 'KS',
+  email: 'kuljeet@college.edu',
   role: 'SDE / Full-Stack',
   targetDate: 'Jun 15',
 };

@@ -168,7 +168,7 @@ export default function Auth() {
               <input
                 type="text"
                 className="input"
-                placeholder="Piyush Thakur"
+                placeholder="Kuljeet Singh"
                 value={form.name}
                 onChange={set('name')}
                 onBlur={blur('name')}
@@ -184,7 +184,7 @@ export default function Auth() {
             <input
               type="email"
               className="input"
-              placeholder="you@college.edu"
+              placeholder="kuljeet@college.edu"
               value={form.email}
               onChange={set('email')}
               onBlur={blur('email')}
