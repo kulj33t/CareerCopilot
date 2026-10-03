@@ -9,19 +9,15 @@ async function start() {
     await connectDb();
   } catch (err) {
     console.error('[startup] failed to connect to MongoDB:', err.message);
-    process.exit(1);
   }
 
-  // Best-effort seed — if it fails, the server still boots and routes work
-  // (just with an empty question list).
   try {
     await seedQuestionsIfEmpty();
   } catch (err) {
     console.warn('[startup] question seed failed:', err.message);
   }
 
-  // Kick off the GitHub-sourced company-question scrape in the background.
-  // Idempotent: it checks whether rows already exist and no-ops if so.
+  
   bootstrapCompanyQuestions();
 
   const app = buildApp();

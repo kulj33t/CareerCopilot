@@ -57,7 +57,12 @@ export function isProviderConfigured(name) {
 }
 
 export function redirectUri(name) {
-  return `${env.PUBLIC_API_URL}/api/auth/${name}/callback`;
+  // Browser navigations (OAuth callback) must land on the same origin as the SPA
+  // and proxied /api routes (e.g. Vercel → Render). Using PUBLIC_API_URL when it
+  // points at Render would set session cookies on *.onrender.com while the app
+  // runs on *.vercel.app → 401 on /api/auth/me.
+  const base = env.PUBLIC_APP_URL.replace(/\/$/, '');
+  return `${base}/api/auth/${name}/callback`;
 }
 
 // Build the URL we redirect the user to in order to start the OAuth dance.

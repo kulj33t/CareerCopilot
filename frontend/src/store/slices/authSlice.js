@@ -16,7 +16,15 @@ export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, thunkA
     return user;
   } catch (err) {
     // Not logged in is the expected state for a fresh visitor — not an error.
-    if (err instanceof ApiError && err.status === 401) return null;
+    if (err instanceof ApiError && err.status === 401) {
+      // #region agent log
+      try {
+        const diag = await authApi.diag();
+        fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'authSlice.js:bootstrap',message:'bootstrap 401 diag',data:{diag,pageOrigin:typeof location!=='undefined'?location.origin:null},timestamp:Date.now(),hypothesisId:'C-E'})}).catch(()=>{});
+      } catch { /* ignore */ }
+      // #endregion
+      return null;
+    }
     return thunkApi.rejectWithValue(asRejection(err));
   }
 });
@@ -33,6 +41,12 @@ export const signup = createAsyncThunk('auth/signup', async (payload, thunkApi) 
 export const login = createAsyncThunk('auth/login', async (payload, thunkApi) => {
   try {
     const { user } = await authApi.login(payload);
+    // #region agent log
+    try {
+      const diag = await authApi.diag();
+      fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'authSlice.js:login',message:'post-login diag',data:{diag,pageOrigin:typeof location!=='undefined'?location.origin:null},timestamp:Date.now(),hypothesisId:'C-D'})}).catch(()=>{});
+    } catch { /* ignore */ }
+    // #endregion
     return user;
   } catch (err) {
     return thunkApi.rejectWithValue(asRejection(err));

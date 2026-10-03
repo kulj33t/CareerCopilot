@@ -6,4 +6,5 @@ export const authApi = {
   logout: () => api.post('/api/auth/logout'),
   me: () => api.get('/api/auth/me'),
   providers: () => api.get('/api/auth/providers'),
+  diag: () => api.get('/api/auth/diag'),
 };

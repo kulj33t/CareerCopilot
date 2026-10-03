@@ -33,7 +33,18 @@ export function buildApp() {
     })
   );
 
-  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+  app.use(
+    cors({
+      origin: env.CORS_ORIGIN,
+      credentials: true,
+    })
+  );
+  // #region agent log
+  app.use('/api/auth', (req, _res, next) => {
+    fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'app.js:cors-check',message:'auth route hit',data:{path:req.path,origin:req.headers.origin||null,corsOrigin:env.CORS_ORIGIN,originMatches:req.headers.origin===env.CORS_ORIGIN,nodeEnv:env.NODE_ENV},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    next();
+  });
+  // #endregion
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser(env.COOKIE_SECRET));
 

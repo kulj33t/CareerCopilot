@@ -1,10 +1,10 @@
-// Shared fetch wrapper. Handles JSON, auth cookies, and error unification so
-// every API module can stay small and declarative.
-
-// In dev, VITE_API_URL is unset and the empty base lets Vite's proxy forward
-// /api → http://localhost:4000. In prod, set VITE_API_URL to the deployed
-// backend origin (e.g. https://career-copilot-api.onrender.com).
 export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+if (import.meta.env.PROD && API_BASE) {
+  console.warn(
+    '[CareerCopilot] VITE_API_URL is set in production. Cross-site auth cookies to the API host often fail in the browser. Prefer Vercel /api rewrites with VITE_API_URL unset.'
+  );
+}
 
 export class ApiError extends Error {
   constructor(message, { status, details } = {}) {
@@ -16,6 +16,10 @@ export class ApiError extends Error {
 }
 
 async function request(path, { method = 'GET', body, headers } = {}) {
+  const url = `${API_BASE}${path}`;
+  // #region agent log
+  fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'client.js:request',message:'api request',data:{apiBase:API_BASE||'(empty-same-origin)',url,method,pageOrigin:typeof location!=='undefined'?location.origin:null},timestamp:Date.now(),hypothesisId:'C-D'})}).catch(()=>{});
+  // #endregion
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: 'include', // send/receive auth cookie
@@ -31,6 +35,9 @@ async function request(path, { method = 'GET', body, headers } = {}) {
   const data = text ? JSON.parse(text) : null;
 
   if (!res.ok) {
+    // #region agent log
+    fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'client.js:request-fail',message:'api error response',data:{url,status:res.status,errorMsg:data?.error?.message},timestamp:Date.now(),hypothesisId:'C-E'})}).catch(()=>{});
+    // #endregion
     const message = data?.error?.message || `Request failed with ${res.status}`;
     throw new ApiError(message, { status: res.status, details: data?.error?.details });
   }

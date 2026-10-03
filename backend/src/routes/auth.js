@@ -61,7 +61,11 @@ authRouter.post('/login', authLimiter, async (req, res, next) => {
     const ok = await comparePassword(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: { message: 'Invalid email or password' } });
 
-    res.cookie(AUTH_COOKIE_NAME, signAuthToken(user._id), authCookieOptions());
+    const cookieOpts = authCookieOptions();
+    res.cookie(AUTH_COOKIE_NAME, signAuthToken(user._id), cookieOpts);
+    // #region agent log
+    fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'auth.js:login',message:'login cookie set',data:{nodeEnv:env.NODE_ENV,cookieOpts,origin:req.headers.origin||null,referer:req.headers.referer||null,corsOrigin:env.CORS_ORIGIN},timestamp:Date.now(),hypothesisId:'A-B'})}).catch(()=>{});
+    // #endregion
     res.json({ user: user.toPublic() });
   } catch (err) {
     next(err);
@@ -87,6 +91,28 @@ authRouter.get('/providers', (_req, res) => {
       linkedin: isProviderConfigured('linkedin'),
     },
   });
+});
+
+// Safe runtime diagnostics for cross-origin cookie issues (no secrets).
+authRouter.get('/diag', (req, res) => {
+  const cookieOpts = authCookieOptions();
+  const payload = {
+    nodeEnv: env.NODE_ENV,
+    corsOrigin: env.CORS_ORIGIN,
+    publicApiUrl: env.PUBLIC_API_URL,
+    publicAppUrl: env.PUBLIC_APP_URL,
+    requestHost: req.headers.host || null,
+    requestOrigin: req.headers.origin || null,
+    originMatchesCors: req.headers.origin === env.CORS_ORIGIN,
+    hasSessionCookie: Boolean(req.cookies?.[AUTH_COOKIE_NAME]),
+    cookieOpts,
+    splitOrigins:
+      env.PUBLIC_API_URL.replace(/\/$/, '') !== env.PUBLIC_APP_URL.replace(/\/$/, ''),
+  };
+  // #region agent log
+  fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'auth.js:diag',message:'diag hit',data:payload,timestamp:Date.now(),hypothesisId:'A-C'})}).catch(()=>{});
+  // #endregion
+  res.json(payload);
 });
 
 // Kick off the OAuth dance. We set a short-lived state cookie for CSRF and
@@ -148,7 +174,11 @@ function finishOAuth(provider) {
         }
       }
 
-      res.cookie(AUTH_COOKIE_NAME, signAuthToken(user._id), authCookieOptions());
+      const cookieOpts = authCookieOptions();
+      res.cookie(AUTH_COOKIE_NAME, signAuthToken(user._id), cookieOpts);
+      // #region agent log
+      fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'auth.js:oauth-callback',message:'oauth cookie set',data:{provider,cookieOpts,publicAppUrl:env.PUBLIC_APP_URL,host:req.headers.host||null},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       res.redirect(`${env.PUBLIC_APP_URL}/dashboard`);
     } catch (err) {
       // Any failure — token exchange, userinfo fetch, db error — funnels back
