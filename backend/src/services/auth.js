@@ -33,17 +33,15 @@ export function verifyAuthToken(token) {
   }
 }
 
-// Cookie options kept in one place so behavior stays consistent across set/clear.
-// In prod the frontend (Vercel) and backend (Render) live on different origins,
-// so the cookie must be SameSite=None;Secure to be sent on cross-site requests.
-// In dev they share an origin via Vite's proxy, so SameSite=Lax is fine.
 export function authCookieOptions() {
   const isProd = env.NODE_ENV === 'production';
   return {
     httpOnly: true,
     sameSite: isProd ? 'none' : 'lax',
-    secure: isProd,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/",
+    domain: "careercopilot-adh6.onrender.com",
+    secure: true,
   };
 }
