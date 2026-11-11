@@ -30,7 +30,7 @@ function AuthLoader() {
 
 export default function RequireAuth() {
   const dispatch = useDispatch();
-  const { user, bootstrapped, sessionError } = useSelector((s) => s.auth);
+  const { user, bootstrapped, sessionError, sessionExpired } = useSelector((s) => s.auth);
   const location = useLocation();
 
   if (!bootstrapped) return <AuthLoader />;
@@ -58,12 +58,21 @@ export default function RequireAuth() {
             Try again
           </button>
           <p style={{ marginTop: 16 }}>
-            <Link to="/auth">Go to sign in</Link>
+            <Link to="/auth?mode=login" state={{ from: location }}>Go to sign in</Link>
           </p>
         </div>
       </div>
     );
   }
 
-  return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
+  return (
+    <Navigate
+      to="/auth?mode=login"
+      replace
+      state={{
+        from: location,
+        ...(sessionExpired ? { reason: 'session-expired' } : {}),
+      }}
+    />
+  );
 }

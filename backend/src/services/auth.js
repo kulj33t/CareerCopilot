@@ -26,8 +26,9 @@ export function signAuthToken(userId) {
 }
 
 export function verifyAuthToken(token) {
+  const secret = requireJwtSecret();
   try {
-    return jwt.verify(token, requireJwtSecret());
+    return jwt.verify(token, secret);
   } catch {
     return null;
   }
@@ -38,9 +39,17 @@ export function authCookieOptions() {
     env.NODE_ENV === 'production' || env.PUBLIC_APP_URL.startsWith('https://');
   return {
     httpOnly: true,
+    // The subdomains share a schemeful site, so Lax does not block direct
+    // API fetches. Keep this cookie host-only: production uses Vercel's /api
+    // proxy so OAuth, login, and later requests all stay on one browser host.
     sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
     secure: isSecureDeployment,
   };
+}
+
+export function clearAuthCookie(res) {
+  const { maxAge: _maxAge, ...options } = authCookieOptions();
+  res.clearCookie(AUTH_COOKIE_NAME, options);
 }

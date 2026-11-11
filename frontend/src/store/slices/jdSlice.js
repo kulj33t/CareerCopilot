@@ -9,13 +9,28 @@ function asRejection(err) {
   return { message: err?.message || 'Request failed' };
 }
 
-export const analyzeJd = createAsyncThunk('jd/analyze', async ({ resumeId, jdText }, thunkApi) => {
-  try {
-    return await jdMatchApi.match({ resumeId, jdText });
-  } catch (err) {
-    return thunkApi.rejectWithValue(asRejection(err));
-  }
-});
+export const analyzeJd = createAsyncThunk(
+  'jd/analyze',
+  async ({ resumeId, jdText }, thunkApi) => {
+    try {
+      const result = await jdMatchApi.match({ resumeId, jdText });
+      const matchPct = Number(result?.matchPct);
+      if (!result || typeof result !== 'object' || !Number.isFinite(matchPct)) {
+        throw new ApiError('The service returned an incomplete match result. Please try again later.');
+      }
+      return {
+        ...result,
+        matchPct: Math.max(0, Math.min(100, matchPct)),
+        matching: Array.isArray(result.matching) ? result.matching.filter((item) => typeof item === 'string') : [],
+        missing: Array.isArray(result.missing) ? result.missing.filter((item) => typeof item === 'string') : [],
+        summary: typeof result.summary === 'string' ? result.summary : 'Your match analysis is ready.',
+      };
+    } catch (err) {
+      return thunkApi.rejectWithValue(asRejection(err));
+    }
+  },
+  { condition: (_, { getState }) => !getState().jd.analyzing }
+);
 
 const initialState = {
   jdText: '',              // current draft in the textarea (persisted locally)

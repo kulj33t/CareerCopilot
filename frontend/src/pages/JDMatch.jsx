@@ -4,6 +4,7 @@ import TopBar from '../components/TopBar.jsx';
 import {
   analyzeJd,
   clearJdError,
+  clearJdResult,
   setJdText,
   setSelectedResume,
 } from '../store/slices/jdSlice.js';
@@ -28,7 +29,9 @@ export default function JDMatch() {
   const dispatch = useDispatch();
 
   const resumes = useSelector((s) => s.resume.list);
+  const resumesLoaded = useSelector((s) => s.resume.listLoaded);
   const resumesLoading = useSelector((s) => s.resume.loading);
+  const resumesError = useSelector((s) => s.resume.error);
   const uploading = useSelector((s) => s.resume.uploading);
   const { jdText, selectedResumeId, result, analyzing, error } = useSelector((s) => s.jd);
 
@@ -38,8 +41,8 @@ export default function JDMatch() {
 
   // Make sure resumes are loaded (user may deep-link here).
   useEffect(() => {
-    if (resumes.length === 0 && !resumesLoading) dispatch(fetchResumes());
-  }, [dispatch, resumes.length, resumesLoading]);
+    if (!resumesLoaded && resumes.length === 0 && !resumesLoading && !resumesError) dispatch(fetchResumes());
+  }, [dispatch, resumes.length, resumesLoading, resumesError, resumesLoaded]);
 
   // Default to the newest resume once the list arrives.
   useEffect(() => {
@@ -48,6 +51,7 @@ export default function JDMatch() {
     }
     if (selectedResumeId && !resumes.some((r) => r.id === selectedResumeId)) {
       dispatch(setSelectedResume(resumes[0]?.id || null));
+      dispatch(clearJdResult());
     }
   }, [dispatch, selectedResumeId, resumes]);
 
@@ -58,6 +62,7 @@ export default function JDMatch() {
 
   const onChangeJd = (e) => {
     dispatch(setJdText(e.target.value));
+    if (result) dispatch(clearJdResult());
     if (error) dispatch(clearJdError());
   };
 
@@ -81,6 +86,7 @@ export default function JDMatch() {
     const r = await dispatch(uploadResume(file));
     if (uploadResume.fulfilled.match(r)) {
       dispatch(setSelectedResume(r.payload.id));
+      dispatch(clearJdResult());
     }
   };
 
@@ -93,7 +99,10 @@ export default function JDMatch() {
   };
 
   const canAnalyze = Boolean(selectedResumeId) && jdText.trim().length >= MIN_JD_LENGTH;
-  const noResumes = !resumesLoading && resumes.length === 0;
+  const noResumes = !resumesLoading && !resumesError && resumes.length === 0;
+  const hasMatchPanel = Boolean(
+    result || analyzing || error || resumesError || (resumesLoading && resumes.length === 0)
+  );
 
   // Shared file input — used by both the empty-state drop zone and the
   // "upload new" button in the header.
@@ -145,7 +154,10 @@ export default function JDMatch() {
               {resumes.length > 0 && (
                 <select
                   value={selectedResumeId || ''}
-                  onChange={(e) => dispatch(setSelectedResume(e.target.value))}
+                  onChange={(e) => {
+                    dispatch(setSelectedResume(e.target.value));
+                    dispatch(clearJdResult());
+                  }}
                   disabled={analyzing || uploading}
                   style={{
                     background: 'var(--bg-elev-2)',
@@ -254,83 +266,40 @@ export default function JDMatch() {
               {analyzing ? 'Analyzing…' : result ? 'Re-analyze →' : 'Analyze match →'}
             </button>
           </div>
-          {error && (
-            <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 10 }}>{error.message}</p>
-          )}
         </div>
 
-        <div>
+        {hasMatchPanel && <div className="jd-result-column">
           {analyzing && !result && (
-            <div className="match-hero" style={{ padding: 48 }}>
-              <div
-                className="mono"
-                style={{
-                  color: 'var(--lime)',
-                  letterSpacing: '0.15em',
-                  fontSize: 11,
-                  marginBottom: 12,
-                  position: 'relative',
-                  zIndex: 2,
-                }}
-              >
-                LLAMA · MATCHING
-              </div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 32,
-                  position: 'relative',
-                  zIndex: 2,
-                }}
-              >
-                Comparing your resume…
-              </div>
-              <p
-                style={{
-                  color: 'var(--text-muted)',
-                  fontSize: 13,
-                  marginTop: 10,
-                  position: 'relative',
-                  zIndex: 2,
-                }}
-              >
-                Takes 3–6 seconds.
-              </p>
-            </div>
+            <section className="match-state is-loading" role="status" aria-live="polite">
+              <span className="match-spinner" aria-hidden="true" />
+              <p className="match-state-kicker">ANALYSIS RUNNING</p>
+              <h2>Comparing your resume with this role</h2>
+              <p>This can take a little while. You can stay on this page while we prepare the results.</p>
+            </section>
           )}
 
-          {!analyzing && !result && (
-            <div className="match-hero" style={{ padding: 48 }}>
-              <div
-                className="mono"
-                style={{
-                  color: 'var(--text-dim)',
-                  letterSpacing: '0.15em',
-                  fontSize: 11,
-                  marginBottom: 12,
-                  position: 'relative',
-                  zIndex: 2,
-                }}
-              >
-                NO MATCH YET
-              </div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 28,
-                  position: 'relative',
-                  zIndex: 2,
-                }}
-              >
-                {noResumes
-                  ? 'Upload a resume, paste a JD, then click Analyze'
-                  : (
-                    <>
-                      Paste a JD and click <em style={{ color: 'var(--lime)' }}>Analyze</em>
-                    </>
-                  )}
-              </div>
-            </div>
+          {!analyzing && !result && resumesLoading && resumes.length === 0 && (
+            <section className="match-state" role="status"><p>Loading your saved resumes…</p></section>
+          )}
+
+          {!analyzing && !result && !resumesLoading && (error || resumesError) && (
+            <section className="match-state">
+              {resumesError && resumes.length === 0 ? (
+                <>
+                  <p className="match-state-kicker">RESUMES UNAVAILABLE</p>
+                  <h2>We couldn’t load your saved resumes.</h2>
+                  <p>{resumesError.message}</p>
+                  <button type="button" className="btn btn-ghost" onClick={() => dispatch(fetchResumes())}>Try again</button>
+                </>
+              ) : error ? (
+                <>
+                  <p className="match-state-kicker">MATCH NOT COMPLETED</p>
+                  <h2>We couldn’t finish this comparison.</h2>
+                  <p>{error.message}</p>
+                  <button type="button" className="btn btn-ghost" disabled={!canAnalyze} onClick={onAnalyze}>Try again</button>
+                </>
+              ) : null}
+            </section>
           )}
 
           {result && (
@@ -428,7 +397,7 @@ export default function JDMatch() {
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
     </>
   );

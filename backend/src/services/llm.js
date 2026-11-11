@@ -3,20 +3,18 @@ import { env } from '../config/env.js';
 // Single place we talk to the LLM. All services go through
 // `generateStructured(...)` so swapping providers is a one-file change.
 //
-// Current provider: Groq (Llama 3.3 70B Versatile, LPU inference).
-// - 14K requests/day on the free tier, ~30 RPM
+// Current provider: Groq (GPT OSS 120B, LPU inference).
 // - OpenAI-compatible chat completions API (no SDK needed, just fetch)
 // - JSON mode returns valid JSON; we encode the schema structure into the
 //   prompt so the model knows what shape to produce.
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
-const MAX_ATTEMPTS = 3;
+export const GROQ_MODEL = env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b';
+const MAX_ATTEMPTS = 2;
 const BASE_BACKOFF_MS = 600;
+const REQUEST_TIMEOUT_MS = 35_000;
 
-// Kept with the same values Gemini's SchemaType enum used, so every service's
-// schema definition (written against the old Gemini adapter) still imports
-// this module and compiles unchanged.
+// Shared schema labels used by the domain services to describe JSON output.
 export const SchemaType = Object.freeze({
   STRING: 'STRING',
   NUMBER: 'NUMBER',
@@ -41,7 +39,7 @@ function requireKey() {
   return env.GROQ_API_KEY;
 }
 
-// Walks a Gemini-style schema into a compact JSON-shaped skeleton, e.g.
+// Walks the domain schema into a compact JSON-shaped skeleton, e.g.
 //   { overallScore: "<integer: 0-100>", dimensions: [{ label: "<string>" }] }
 // Pasted into the prompt so the LLM knows exactly what to produce.
 function schemaToShape(s) {
@@ -67,8 +65,9 @@ function schemaToShape(s) {
 
 function isRetryable(err) {
   const status = err?.status ?? err?.statusCode;
-  // 429 quota, 500/502/503 transient server issues — all worth a retry.
-  return status === 429 || status === 500 || status === 502 || status === 503;
+  // Do not retry provider 429s; retrying immediately adds pressure to a quota
+  // limit. A single retry is reserved for transient upstream server failures.
+  return status === 500 || status === 502 || status === 503 || status === 504;
 }
 
 function sleep(ms) {
@@ -78,8 +77,8 @@ function sleep(ms) {
 /**
  * Generates a structured JSON response from the LLM.
  * - `prompt`         — the domain prompt written by the calling service
- * - `responseSchema` — Gemini-style schema describing the expected JSON
- * - `model`          — override Llama 3.3 70B Versatile if needed
+ * - `responseSchema` — schema describing the expected JSON
+ * - `model`          — override the configured Groq model if needed
  * - `temperature`    — 0–1, lower = more deterministic
  * - `maxOutputTokens`— upper bound on response size
  *
@@ -88,7 +87,7 @@ function sleep(ms) {
 export async function generateStructured({
   prompt,
   responseSchema,
-  model = DEFAULT_MODEL,
+  model = GROQ_MODEL,
   temperature = 0.3,
   maxOutputTokens = 2048,
 }) {
@@ -118,6 +117,8 @@ ${shapeString}`;
 
   let lastErr = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const res = await fetch(GROQ_URL, {
         method: 'POST',
@@ -126,12 +127,22 @@ ${shapeString}`;
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
         const text = await res.text();
-        const err = new Error(`Groq API ${res.status}: ${text.slice(0, 300)}`);
+        const err = new Error(`Groq API request failed (${res.status})`);
         err.status = res.status;
+        err.retryAfter = res.headers.get('retry-after') || undefined;
+        try {
+          err.code = JSON.parse(text)?.error?.code;
+        } catch {
+          // Keep provider response parsing best-effort; never return it to clients.
+        }
+        if (err.code === 'model_not_found') {
+          console.error(`[llm] Groq model is unavailable to this project: ${model}`);
+        }
         throw err;
       }
 
@@ -149,7 +160,9 @@ ${shapeString}`;
         throw wrap;
       }
     } catch (err) {
-      lastErr = err;
+      lastErr = controller.signal.aborted
+        ? Object.assign(new Error('Groq request timed out'), { name: 'AbortError' })
+        : err;
       if (attempt < MAX_ATTEMPTS && (isRetryable(err) || err.retryable)) {
         const delay = BASE_BACKOFF_MS * Math.pow(2, attempt - 1);
         console.warn(
@@ -159,15 +172,28 @@ ${shapeString}`;
         continue;
       }
       break;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
+  const modelUnavailable = lastErr?.code === 'model_not_found';
+  const rateLimited = lastErr?.status === 429;
+  const timedOut = lastErr?.name === 'AbortError';
   const final = new Error(
-    isRetryable(lastErr)
-      ? 'The AI is busy right now. Please try again in a moment.'
-      : lastErr?.message || 'AI request failed'
+    modelUnavailable
+      ? 'The AI service is temporarily unavailable. Please try again later.'
+      : rateLimited
+        ? 'The AI service is busy right now. Please wait before trying again.'
+        : timedOut
+          ? 'The AI service took too long to respond. Please try again later.'
+          : isRetryable(lastErr)
+        ? 'The AI service is busy right now. Please try again in a moment.'
+        : 'The AI service could not complete this request. Please try again later.'
   );
-  final.status = isRetryable(lastErr) ? 503 : 500;
+  final.status = modelUnavailable || isRetryable(lastErr) ? 503 : rateLimited ? 429 : timedOut ? 504 : 500;
+  if (rateLimited && lastErr?.retryAfter) final.retryAfter = lastErr.retryAfter;
+  if (modelUnavailable) final.code = 'AI_MODEL_UNAVAILABLE';
   final.cause = lastErr;
   throw final;
 }

@@ -9,7 +9,7 @@ import './index.css';
 
 // Apply stored theme synchronously before first paint to avoid flash
 try {
-  const t = localStorage.getItem('cc-theme') || 'light';
+  const t = localStorage.getItem('career-copilot-theme-tokyo-night-v1') || 'dark';
   document.documentElement.setAttribute('data-theme', t);
 } catch {}
 

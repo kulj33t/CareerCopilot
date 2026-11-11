@@ -254,7 +254,7 @@ export default function ResumeUpload() {
   useEffect(() => {
     if (!activeId) return;
     if (analyses[activeId]) return;
-    if (analysisStatus[activeId] === 'loading') return;
+    if (['loading', 'error', 'success'].includes(analysisStatus[activeId])) return;
     dispatch(analyzeResume({ resumeId: activeId }));
   }, [dispatch, activeId, analyses, analysisStatus]);
 
@@ -413,7 +413,7 @@ export default function ResumeUpload() {
                 onClick={() => dispatch(setActive(r.id))}
                 style={{
                   borderColor: isActive ? 'var(--lime-dim)' : undefined,
-                  background: isActive ? 'rgba(250,82,15,0.06)' : undefined,
+                  background: isActive ? 'var(--lime-glow)' : undefined,
                 }}
               >
                 <div className="file-icon">{r.fileType}</div>

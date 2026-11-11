@@ -1,10 +1,9 @@
-import { generateStructured, SchemaType } from './llm.js';
+import { generateStructured, GROQ_MODEL as MODEL, SchemaType } from './llm.js';
 import { QuestionAnswer } from '../models/QuestionAnswer.js';
 
-const MODEL = 'llama-3.3-70b-versatile';
 
-// Domains we're willing to surface as "further reading" links. Gemini
-// sometimes hallucinates URLs, so we drop anything off-list.
+// Domains we're willing to surface as "further reading" links. The model can
+// invent URLs, so we drop anything off-list.
 const ALLOWED_REFERENCE_PREFIXES = [
   'https://leetcode.com/',
   'https://www.geeksforgeeks.org/',
@@ -121,7 +120,7 @@ function filterReferences(refs) {
 }
 
 /**
- * Generates a cached model answer for a question via Gemini. Idempotent:
+ * Generates and caches a model answer for a question. Idempotent:
  * call `findExisting` first if you want to skip the LLM round-trip.
  */
 export async function generateQuestionAnswer(question) {

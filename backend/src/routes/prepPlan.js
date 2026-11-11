@@ -2,7 +2,7 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { PrepPlan } from '../models/PrepPlan.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { llmLimiter } from '../middleware/rateLimit.js';
+import { enforceLlmLimit } from '../middleware/rateLimit.js';
 import { generatePrepPlan } from '../services/prepPlan.js';
 import { parseBody } from '../validators/auth.js';
 import { prepPlanInputSchema } from '../validators/prepPlan.js';
@@ -14,12 +14,13 @@ prepPlanRouter.use(requireAuth);
 /**
  * GET /api/prep-plan
  * Returns the current plan, auto-generating one if none exists yet.
- * Uses llmLimiter because the first call runs a Gemini generation.
+ * Charges the AI limit only when no cached plan exists and generation is needed.
  */
-prepPlanRouter.get('/', llmLimiter, async (req, res, next) => {
+prepPlanRouter.get('/', async (req, res, next) => {
   try {
     const existing = await PrepPlan.findOne({ userId: req.user._id });
     if (existing) return res.json({ plan: existing.toPublic(), generated: false });
+    if (!(await enforceLlmLimit(req, res))) return;
 
     const plan = await generatePrepPlan({
       user: req.user,
@@ -40,9 +41,10 @@ prepPlanRouter.get('/', llmLimiter, async (req, res, next) => {
  * Body: { targetRole?, interviewDate?, weakTopics? }
  * Replaces the existing plan.
  */
-prepPlanRouter.post('/regenerate', llmLimiter, async (req, res, next) => {
+prepPlanRouter.post('/regenerate', async (req, res, next) => {
   try {
     const input = parseBody(prepPlanInputSchema, req.body || {});
+    if (!(await enforceLlmLimit(req, res))) return;
     const plan = await generatePrepPlan({
       user: req.user,
       targetRole: input.targetRole || 'Full-stack / SDE',

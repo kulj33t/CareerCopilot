@@ -2,7 +2,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://career-copilot-cb7p.onrender.com/api/:path*"
+      "destination": "https://careercopilot-backend.kuljeet.online/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

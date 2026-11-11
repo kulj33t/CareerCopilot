@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, Routes, Route } from 'react-router-dom';
+import { Link, Navigate, Routes, Route } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import AppLayout from './components/AppLayout.jsx';
 import RequireAuth from './components/RequireAuth.jsx';
@@ -14,10 +14,44 @@ import PrepPlan from './pages/PrepPlan.jsx';
 import InterviewSetup from './pages/InterviewSetup.jsx';
 import InterviewChat from './pages/InterviewChat.jsx';
 import Report from './pages/Report.jsx';
-import { bootstrapAuth } from './store/slices/authSlice.js';
+import { bootstrapAuth, markSessionExpired } from './store/slices/authSlice.js';
+import { SESSION_EXPIRED_EVENT } from './api/client.js';
+
+function NotFound() {
+  return (
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        color: 'var(--text)',
+        background: 'var(--bg)',
+      }}
+    >
+      <section style={{ maxWidth: 480, textAlign: 'center' }}>
+        <p className="mono" style={{ color: 'var(--lime)', letterSpacing: '0.14em' }}>404 · PAGE NOT FOUND</p>
+        <h1 style={{ margin: '12px 0', fontFamily: 'var(--font-display)' }}>This page isn’t here.</h1>
+        <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
+          The address may have changed, or the page may no longer be available.
+        </p>
+        <Link className="btn btn-primary" to="/" replace>Go to home</Link>
+      </section>
+    </main>
+  );
+}
 
 export default function App() {
   const dispatch = useDispatch();
+
+  // A 401 from a protected API call means the HttpOnly session cookie is no
+  // longer usable. Clear private client state and let RequireAuth preserve the
+  // current URL while sending the user to sign in.
+  useEffect(() => {
+    const onSessionExpired = () => dispatch(markSessionExpired());
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, [dispatch]);
 
   // Ask the server "who am I?" on every app load. The cookie is the source of
   // truth, so we don't trust any cached client-side auth state.
@@ -47,6 +81,7 @@ export default function App() {
           <Route path="/interview/report" element={<Report />} />
         </Route>
       </Route>
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

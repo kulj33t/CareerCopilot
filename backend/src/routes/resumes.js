@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { Resume } from '../models/Resume.js';
 import { ResumeAnalysis } from '../models/ResumeAnalysis.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { llmLimiter } from '../middleware/rateLimit.js';
+import { enforceLlmLimit } from '../middleware/rateLimit.js';
 import { fileTypeFromUpload, resumeUploader } from '../middleware/uploadResume.js';
 import {
   deleteResumeAsset,
@@ -140,13 +140,13 @@ resumesRouter.get('/:id/analysis', async (req, res, next) => {
 /**
  * POST /api/resumes/:id/analysis
  * Idempotent — returns cached analysis if one exists, otherwise generates it
- * via Gemini. This is the endpoint the frontend calls on ResumeResults mount.
+ * via the configured AI provider. This is the endpoint the frontend calls on
+ * analyzer mount.
  * Accepts `?force=true` to force regeneration.
  *
- * `llmLimiter` guards the regeneration path (cached responses short-circuit
- * before hitting Gemini so the rate counter is a conservative upper bound).
+ * The AI limit is charged only after ownership and cache checks pass.
  */
-resumesRouter.post('/:id/analysis', llmLimiter, async (req, res, next) => {
+resumesRouter.post('/:id/analysis', async (req, res, next) => {
   try {
     const resume = await findOwnedResume(req);
     const force = req.query.force === 'true';
@@ -156,6 +156,7 @@ resumesRouter.post('/:id/analysis', llmLimiter, async (req, res, next) => {
       if (existing) return res.json({ analysis: existing.toPublic(), cached: true });
     }
 
+    if (!(await enforceLlmLimit(req, res))) return;
     const analysis = await analyzeResume(resume);
     res.json({ analysis: analysis.toPublic(), cached: false });
   } catch (err) {

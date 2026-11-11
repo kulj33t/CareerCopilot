@@ -2,7 +2,7 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { InterviewSession } from '../models/InterviewSession.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { llmLimiter } from '../middleware/rateLimit.js';
+import { enforceLlmLimit } from '../middleware/rateLimit.js';
 import {
   endSessionWithReport,
   postUserAnswer,
@@ -32,17 +32,18 @@ async function findOwnedSession(req) {
 
 /**
  * POST /api/interview/sessions
- * Starts a new session (Gemini generates the opening turn).
+ * Starts a new session (the configured AI provider generates the opening turn).
  * If an active session already exists, returns it — we never run parallel
  * sessions for the same user (see unique index on the model).
  */
-interviewRouter.post('/sessions', llmLimiter, async (req, res, next) => {
+interviewRouter.post('/sessions', async (req, res, next) => {
   try {
     const setup = parseBody(setupSchema, req.body || {});
 
     const active = await InterviewSession.findOne({ userId: req.user._id, state: 'active' });
     if (active) return res.json({ session: active.toPublic(), reused: true });
 
+    if (!(await enforceLlmLimit(req, res))) return;
     const session = await startSession({ user: req.user, setup });
     res.status(201).json({ session: session.toPublic(), reused: false });
   } catch (err) {
@@ -74,16 +75,17 @@ interviewRouter.get('/sessions/:id', async (req, res, next) => {
 /**
  * POST /api/interview/sessions/:id/messages
  * Body: { text }
- * Synchronous — waits for Gemini to respond, then returns the updated session.
+ * Synchronous — waits for the AI provider to respond, then returns the updated session.
  * Frontend shows a typing indicator during the wait.
  */
-interviewRouter.post('/sessions/:id/messages', llmLimiter, async (req, res, next) => {
+interviewRouter.post('/sessions/:id/messages', async (req, res, next) => {
   try {
     const session = await findOwnedSession(req);
     if (session.state === 'ended') {
       return res.status(409).json({ error: { message: 'Session has already ended' } });
     }
     const { text } = parseBody(sendMessageSchema, req.body || {});
+    if (!(await enforceLlmLimit(req, res))) return;
     const updated = await postUserAnswer(session, text);
     res.json({ session: updated.toPublic() });
   } catch (err) {
@@ -96,9 +98,13 @@ interviewRouter.post('/sessions/:id/messages', llmLimiter, async (req, res, next
  * Ends the session and generates the report. Idempotent — ending an
  * already-ended session just returns the existing report.
  */
-interviewRouter.post('/sessions/:id/end', llmLimiter, async (req, res, next) => {
+interviewRouter.post('/sessions/:id/end', async (req, res, next) => {
   try {
     const session = await findOwnedSession(req);
+    if (session.state === 'ended' && session.report) {
+      return res.json({ session: session.toPublic() });
+    }
+    if (!(await enforceLlmLimit(req, res))) return;
     const updated = await endSessionWithReport(session);
     res.json({ session: updated.toPublic() });
   } catch (err) {

@@ -9,21 +9,29 @@ function asRejection(err) {
   return { message: err?.message || 'Request failed' };
 }
 
-export const fetchResumes = createAsyncThunk('resumes/fetchAll', async (_, thunkApi) => {
-  try {
-    return await resumesApi.list();
-  } catch (err) {
-    return thunkApi.rejectWithValue(asRejection(err));
-  }
-});
+export const fetchResumes = createAsyncThunk(
+  'resumes/fetchAll',
+  async (_, thunkApi) => {
+    try {
+      return await resumesApi.list();
+    } catch (err) {
+      return thunkApi.rejectWithValue(asRejection(err));
+    }
+  },
+  { condition: (_, { getState }) => !getState().resume.loading }
+);
 
-export const uploadResume = createAsyncThunk('resumes/upload', async (file, thunkApi) => {
-  try {
-    return await resumesApi.upload(file);
-  } catch (err) {
-    return thunkApi.rejectWithValue(asRejection(err));
-  }
-});
+export const uploadResume = createAsyncThunk(
+  'resumes/upload',
+  async (file, thunkApi) => {
+    try {
+      return await resumesApi.upload(file);
+    } catch (err) {
+      return thunkApi.rejectWithValue(asRejection(err));
+    }
+  },
+  { condition: (_, { getState }) => !getState().resume.uploading }
+);
 
 export const deleteResume = createAsyncThunk('resumes/delete', async (id, thunkApi) => {
   try {
@@ -41,16 +49,52 @@ export const analyzeResume = createAsyncThunk(
   async ({ resumeId, force = false }, thunkApi) => {
     try {
       const res = await resumesApi.analyze(resumeId, { force });
-      return { resumeId, analysis: res.analysis, cached: res.cached };
+      const analysis = res?.analysis;
+      if (
+        !analysis ||
+        typeof analysis !== 'object' ||
+        Array.isArray(analysis) ||
+        !Number.isFinite(Number(analysis.overallScore)) ||
+        !Array.isArray(analysis.dimensions) ||
+        !Array.isArray(analysis.feedback) ||
+        !Array.isArray(analysis.atsChecks)
+      ) {
+        throw new ApiError('The service completed without returning a resume analysis. Please try again later.');
+      }
+      return {
+        resumeId,
+        analysis: {
+          ...analysis,
+          overallScore: Math.max(0, Math.min(100, Number(analysis.overallScore))),
+          summary: typeof analysis.summary === 'string' ? analysis.summary : 'Your resume analysis is ready.',
+          dimensions: analysis.dimensions.filter((item) =>
+            item && typeof item === 'object' && typeof item.label === 'string' && Number.isFinite(Number(item.value))
+          ).map((item) => ({ ...item, value: Math.max(0, Math.min(100, Number(item.value))) })),
+          feedback: analysis.feedback.filter((item) =>
+            item && typeof item === 'object' && typeof item.title === 'string' && typeof item.body === 'string'
+          ),
+          atsChecks: analysis.atsChecks.filter((item) =>
+            item && typeof item === 'object' && typeof item.label === 'string'
+          ),
+        },
+        cached: Boolean(res.cached),
+      };
     } catch (err) {
       return thunkApi.rejectWithValue(asRejection(err));
     }
+  },
+  {
+    condition: ({ resumeId, force = false }, { getState }) => {
+      const status = getState().resume.analysisStatus[resumeId];
+      return Boolean(resumeId) && status !== 'loading' && (force || status !== 'success');
+    },
   }
 );
 
 const initialState = {
   list: [],                        // Resume[] from server
   activeId: null,                  // currently viewed resume (for results page)
+  listLoaded: false,               // prevents empty/error responses from re-triggering auto-fetch
   loading: false,                  // list fetch in-flight
   uploading: false,                // upload in-flight
   error: null,                     // most recent error (read-and-clear)
@@ -58,7 +102,7 @@ const initialState = {
   // Analysis cache keyed by resumeId, plus a simple request status map so the
   // UI can show per-resume loading states.
   analyses: {},                    // { [resumeId]: Analysis }
-  analysisStatus: {},              // { [resumeId]: 'idle' | 'loading' | 'error' }
+  analysisStatus: {},              // { [resumeId]: 'loading' | 'error' | 'success' }
   analysisError: null,             // last analysis failure
 };
 
@@ -81,7 +125,8 @@ const resumeSlice = createSlice({
       })
       .addCase(fetchResumes.fulfilled, (state, action) => {
         state.loading = false;
-        state.list = action.payload;
+        state.listLoaded = true;
+        state.list = Array.isArray(action.payload) ? action.payload : [];
         // If the previously active resume no longer exists (e.g. deleted on
         // another device), fall back to the newest one.
         if (state.activeId && !state.list.some((r) => r.id === state.activeId)) {
@@ -90,6 +135,7 @@ const resumeSlice = createSlice({
       })
       .addCase(fetchResumes.rejected, (state, action) => {
         state.loading = false;
+        state.listLoaded = true;
         state.error = action.payload || { message: 'Failed to load resumes' };
       })
 
@@ -124,7 +170,7 @@ const resumeSlice = createSlice({
       })
       .addCase(analyzeResume.fulfilled, (state, action) => {
         const { resumeId, analysis } = action.payload;
-        state.analysisStatus[resumeId] = 'idle';
+        state.analysisStatus[resumeId] = 'success';
         state.analyses[resumeId] = analysis;
       })
       .addCase(analyzeResume.rejected, (state, action) => {

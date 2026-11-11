@@ -17,6 +17,9 @@ export default function UserMenu() {
   const user = useSelector((s) => s.auth.user);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const toggleMenu = () => {
+    setOpen((value) => !value);
+  };
 
   // Close on outside click + Esc
   useEffect(() => {
@@ -44,58 +47,40 @@ export default function UserMenu() {
   };
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className="account-control">
       <button
         type="button"
-        className="avatar"
-        onClick={() => setOpen((o) => !o)}
+        className="account-trigger"
+        onClick={toggleMenu}
         aria-haspopup="menu"
         aria-expanded={open}
-        style={{ cursor: 'pointer', border: 'none' }}
+        aria-label={open ? 'Close account menu' : `${user.name || 'Account'} menu`}
+        title={open ? 'Close account menu' : 'Open account menu'}
       >
-        {initialsOf(user.name)}
+        <span className="avatar">{initialsOf(user.name)}</span>
+        <span className="account-trigger-name">{user.name?.split(' ')[0] || 'Account'}</span>
+        <svg className={`account-chevron${open ? ' is-open' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
+          {open ? <path d="m6 6 8 8m0-8-8 8" /> : <path d="m5 7.5 5 5 5-5" />}
+        </svg>
       </button>
 
       {open && (
-        <div
-          role="menu"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            minWidth: 220,
-            padding: 8,
-            background: 'var(--bg-elev-1)',
-            border: '1px solid var(--border)',
-            borderRadius: 12,
-            boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-            zIndex: 50,
-          }}
-        >
-          <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', marginBottom: 6 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 500 }}>{user.name}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{user.email}</div>
+        <div role="menu" className="account-menu">
+          <div className="account-menu-user">
+            <span className="avatar">{initialsOf(user.name)}</span>
+            <span className="account-menu-identity">
+              <strong>{user.name || 'Account'}</strong>
+              <small>{user.email}</small>
+            </span>
           </div>
           <button
             type="button"
             role="menuitem"
             onClick={handleLogout}
-            style={{
-              width: '100%',
-              textAlign: 'left',
-              padding: '10px 12px',
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text)',
-              fontFamily: 'inherit',
-              fontSize: 13.5,
-              borderRadius: 8,
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            className="account-logout"
           >
-            Log out
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3H4.5A1.5 1.5 0 0 0 3 4.5v11A1.5 1.5 0 0 0 4.5 17H8m4-3 4-4-4-4m4 4H7" /></svg>
+            Sign out
           </button>
         </div>
       )}

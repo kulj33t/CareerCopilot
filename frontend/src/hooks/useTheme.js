@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 
-const KEY = 'cc-theme';
+const KEY = 'career-copilot-theme-tokyo-night-v1';
 
 function getStored() {
-  try { return localStorage.getItem(KEY) || 'light'; } catch { return 'light'; }
+  try { return localStorage.getItem(KEY) || 'dark'; } catch { return 'dark'; }
 }
 
 export function useTheme() {

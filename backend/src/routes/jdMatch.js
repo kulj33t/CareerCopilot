@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Resume } from '../models/Resume.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { llmLimiter } from '../middleware/rateLimit.js';
+import { enforceLlmLimit } from '../middleware/rateLimit.js';
 import { matchJobDescription } from '../services/jdMatch.js';
 import { parseBody } from '../validators/auth.js';
 import { jdMatchSchema } from '../validators/jdMatch.js';
@@ -9,7 +9,6 @@ import { jdMatchSchema } from '../validators/jdMatch.js';
 export const jdMatchRouter = Router();
 
 jdMatchRouter.use(requireAuth);
-jdMatchRouter.use(llmLimiter);
 
 /**
  * POST /api/jd-match
@@ -27,6 +26,7 @@ jdMatchRouter.post('/', async (req, res, next) => {
       return res.status(404).json({ error: { message: 'Resume not found' } });
     }
 
+    if (!(await enforceLlmLimit(req, res))) return;
     const result = await matchJobDescription({ resume, jdText });
     res.json({ match: result });
   } catch (err) {

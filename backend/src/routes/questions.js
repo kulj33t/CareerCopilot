@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { Question } from '../models/Question.js';
 import { QuestionBookmark } from '../models/QuestionBookmark.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { llmLimiter } from '../middleware/rateLimit.js';
+import { enforceLlmLimit } from '../middleware/rateLimit.js';
 import {
   findExistingAnswer,
   generateQuestionAnswer,
@@ -151,10 +151,10 @@ questionsRouter.get('/:id/answer', async (req, res, next) => {
 
 /**
  * POST /api/questions/:id/answer
- * Idempotent: returns cached if present, otherwise generates via Gemini.
+ * Idempotent: returns cached if present, otherwise generates an answer.
  * `?force=true` forces regeneration.
  */
-questionsRouter.post('/:id/answer', llmLimiter, async (req, res, next) => {
+questionsRouter.post('/:id/answer', async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: { message: 'Invalid question id' } });
@@ -170,6 +170,7 @@ questionsRouter.post('/:id/answer', llmLimiter, async (req, res, next) => {
       if (existing) return res.json({ answer: existing.toPublic(), cached: true });
     }
 
+    if (!(await enforceLlmLimit(req, res))) return;
     const answer = await generateQuestionAnswer(question);
     res.json({ answer: answer.toPublic(), cached: false });
   } catch (err) {

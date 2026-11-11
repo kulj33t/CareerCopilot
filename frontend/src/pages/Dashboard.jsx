@@ -4,30 +4,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import TopBar from '../components/TopBar.jsx';
 import { fetchDashboard } from '../store/slices/userSlice.js';
 
-function Heatmap({ cells }) {
-  // Fall back to an empty grid if the server hasn't returned yet.
-  if (!cells || cells.length === 0) {
-    return (
-      <div className="heatmap-grid">
-        {Array.from({ length: 84 }).map((_, i) => (
-          <div key={i} className="heatmap-cell" />
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="heatmap-grid">
-      {cells.map((c, i) => (
-        <div
-          key={i}
-          className={`heatmap-cell${c.level > 0 ? ' l' + c.level : ''}`}
-          title={`${new Date(c.date).toLocaleDateString()}: ${c.level === 0 ? 'no activity' : 'level ' + c.level}`}
-        />
-      ))}
-    </div>
-  );
-}
-
 function topicColor(key) {
   return `var(--${key})`;
 }
@@ -45,7 +21,7 @@ function trendClass(delta) {
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { stats, recommendations, activity, weakTopics, heatmap, loading, loaded, error } =
+  const { stats, recommendations, activity, weakTopics, loading, loaded, error } =
     useSelector((s) => s.user);
   const authUser = useSelector((s) => s.auth.user);
   const firstName = (authUser?.name || 'there').split(' ')[0];
@@ -64,37 +40,27 @@ export default function Dashboard() {
     else navigate('/prep');
   };
 
-  const heroHeadline =
-    stats.streak >= 7
-      ? "you're on fire."
-      : stats.streak >= 3
-      ? "keep it rolling."
-      : 'ready to ramp up?';
-
   return (
     <>
-      <TopBar
-        rightContent={
-          <span className="pill pill-lime">🔥 {stats.streak}-day streak</span>
-        }
-      />
+      <TopBar />
 
       <div className="page-hero">
         <div>
           <h1>
-            Hey {firstName} — <em>{heroHeadline}</em>
+            Welcome back, <em>{firstName}.</em>
           </h1>
           <div className="page-hero-meta">
             {loading && !loaded
               ? 'Loading your progress…'
               : error
-              ? `Couldn't load your dashboard: ${error.message}`
-              : "Here's what's happening with your prep journey today."}
+              ? `Couldn't refresh your dashboard. ${error.message}`
+              : 'Your preparation at a glance.'}
+            {error && <button className="text-button dashboard-retry" onClick={() => dispatch(fetchDashboard())}>Try again</button>}
           </div>
         </div>
-        <div className="streak-card">
-          <div className="streak-num">{stats.streak}</div>
-          <div className="streak-label">Day Streak</div>
+        <div className="streak-inline">
+          <span className="streak-num">{stats.streak}</span>
+          <span className="streak-label">day practice streak</span>
         </div>
       </div>
 
@@ -156,7 +122,7 @@ export default function Dashboard() {
             )}
             {recommendations.map((r, i) => (
               <div key={i} className="rec-card" onClick={() => onRecClick(r)}>
-                <div className="rec-icon">{r.icon}</div>
+                <div className="rec-icon" aria-hidden="true">↗</div>
                 <div>
                   <h5>{r.title}</h5>
                   <p>{r.body}</p>
@@ -187,17 +153,7 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <div className="card" style={{ gridColumn: 'span 8' }}>
-          <div className="card-head">
-            <h3>Your <em>grind</em></h3>
-            <span className="mono" style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-              LAST 84 DAYS
-            </span>
-          </div>
-          <Heatmap cells={heatmap} />
-        </div>
-
-        <div className="card" style={{ gridColumn: 'span 4' }}>
+        <div className="card" style={{ gridColumn: 'span 12' }}>
           <div className="card-head">
             <h3>Weak <em>topics</em></h3>
           </div>
@@ -206,7 +162,7 @@ export default function Dashboard() {
               Complete a mock interview to surface weak areas.
             </p>
           )}
-          <div style={{ display: 'grid', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
             {weakTopics.map((t) => (
               <div key={t.name}>
                 <div className="topic-row">

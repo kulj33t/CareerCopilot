@@ -2,7 +2,8 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { CompanyQuestion } from '../models/CompanyQuestion.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { llmLimiter } from '../middleware/rateLimit.js';
+import { enforceLlmLimit } from '../middleware/rateLimit.js';
+import { env } from '../config/env.js';
 import {
   getScrapeStatus,
   syncIfChanged,
@@ -116,7 +117,7 @@ companyQuestionsRouter.get('/:id/answer', async (req, res, next) => {
  * since problem answers don't vary per candidate).
  * ?force=true bypasses the cache.
  */
-companyQuestionsRouter.post('/:id/answer', llmLimiter, async (req, res, next) => {
+companyQuestionsRouter.post('/:id/answer', async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: { message: 'Invalid question id' } });
@@ -128,6 +129,8 @@ companyQuestionsRouter.post('/:id/answer', llmLimiter, async (req, res, next) =>
     if (!force && q.answer && q.answer.tldr) {
       return res.json({ answer: q.answerPublic(), question: q.toPublic(), cached: true });
     }
+
+    if (!(await enforceLlmLimit(req, res))) return;
 
     // Reuse the exact same prompt machinery as the in-house Question bank.
     // We pass the CompanyQuestion shape in — the prompt only cares about
@@ -149,6 +152,9 @@ companyQuestionsRouter.post('/:id/answer', llmLimiter, async (req, res, next) =>
 
 companyQuestionsRouter.post('/reseed', async (req, res, next) => {
   try {
+    if (env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: { message: 'Route not found' } });
+    }
     syncIfChanged({ force: true })
       .then((r) => console.log('[company-scrape] forced reseed done:', r.scraped ? 'scraped' : 'no-op'))
       .catch((e) => console.error('[company-scrape] forced reseed failed:', e.message));

@@ -1,10 +1,9 @@
 import { ResumeAnalysis } from '../models/ResumeAnalysis.js';
-import { generateStructured, SchemaType } from './llm.js';
+import { generateStructured, GROQ_MODEL as MODEL, SchemaType } from './llm.js';
 import { extractTextFromResume } from './textExtract.js';
 
-const MODEL = 'llama-3.3-70b-versatile';
 
-// Gemini structured-output schema. Constrains the model to return exactly the
+// Structured-output schema. Constrains the model to return exactly the
 // shape the frontend expects.
 const analysisSchema = {
   type: SchemaType.OBJECT,
@@ -68,7 +67,7 @@ const analysisSchema = {
 };
 
 function buildPrompt(resumeText) {
-  // Gemini does better with a structured, role-framed prompt and explicit
+  // The model does better with a structured, role-framed prompt and explicit
   // rubrics. We cap the resume to avoid blowing through free-tier token limits.
   const capped = resumeText.length > 10_000 ? resumeText.slice(0, 10_000) : resumeText;
 
@@ -101,7 +100,7 @@ ${capped}
 }
 
 /**
- * Runs the full pipeline: extract text → prompt Gemini → save analysis.
+ * Runs the full pipeline: extract text → prompt the model → save analysis.
  * Upserts by resumeId so repeat calls overwrite stale results.
  */
 export async function analyzeResume(resume) {

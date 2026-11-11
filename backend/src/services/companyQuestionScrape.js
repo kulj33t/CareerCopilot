@@ -12,6 +12,8 @@ const GH_RAW_BASE = `https://raw.githubusercontent.com/${GH_REPO}/main`;
 const ALL_CSV_NAME = '5. All.csv';
 const CONCURRENCY = 6;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
+const FETCH_TIMEOUT_MS = 12_000;
+let activeSync = null;
 
 // Parse one CSV row respecting quoted fields (the Topics column has commas
 // inside quotes). Simple hand-rolled parser; no npm dep.
@@ -102,20 +104,36 @@ function slugFromTitle(title) {
 }
 
 async function fetchJson(url) {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'careercopilot-dev',
-      Accept: 'application/vnd.github+json',
-    },
-  });
-  if (!res.ok) throw new Error(`${url} → ${res.status}`);
-  return res.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'careercopilot',
+        Accept: 'application/vnd.github+json',
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`GitHub request failed (${res.status})`);
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function fetchText(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'careercopilot-dev' } });
-  if (!res.ok) throw new Error(`${url} → ${res.status}`);
-  return res.text();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'careercopilot' },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`GitHub file request failed (${res.status})`);
+    return await res.text();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function listCompanies() {
@@ -238,7 +256,7 @@ async function runAndPersist(reason) {
  * Cheap — one API call when the repo hasn't moved. If GitHub is unreachable,
  * silently no-ops (we don't block boot on upstream availability).
  */
-export async function syncIfChanged({ force = false } = {}) {
+async function syncIfChangedInternal({ force = false } = {}) {
   const state = await ScrapeState.findOne({ source: SOURCE_KEY });
   const rowsExist = (await CompanyQuestion.estimatedDocumentCount()) > 0;
   const latestSha = await fetchLatestCommitSha();
@@ -287,6 +305,16 @@ export async function syncIfChanged({ force = false } = {}) {
   );
 
   return { scraped: true, sha: latestSha, result };
+}
+
+// Initial startup, the scheduled check, and the dev-only manual route can
+// overlap. Share a single sync promise instead of starting duplicate scrapes.
+export function syncIfChanged(options = {}) {
+  if (activeSync) return activeSync;
+  activeSync = syncIfChangedInternal(options).finally(() => {
+    activeSync = null;
+  });
+  return activeSync;
 }
 
 /**

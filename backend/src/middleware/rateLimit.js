@@ -13,7 +13,7 @@ function handler(req, res) {
 // `ipKeyGenerator` properly subnets IPv6 so attackers can't cycle the low
 // 64 bits to bypass per-IP limits.
 function userOrIpKey(req, res) {
-  return req.user?._id ? `u:${req.user._id}` : ipKeyGenerator(req, res);
+  return req.user?._id ? `u:${req.user._id}` : ipKeyGenerator(req.ip);
 }
 
 // Catch-all limiter mounted at app level. Generous for normal browsing but
@@ -36,9 +36,9 @@ export const authLimiter = rateLimit({
   message: 'Too many auth attempts. Try again in a minute.',
 });
 
-// Guards anything that hits Gemini — each call costs real quota. Per-user
+// Guards AI generations — each call costs provider quota. Per-user
 // because we don't want one account burning the whole budget.
-export const llmLimiter = rateLimit({
+const llmLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 30,
   standardHeaders: true,
@@ -52,3 +52,34 @@ export const llmLimiter = rateLimit({
       },
     }),
 });
+
+// Call after validating an AI request and checking its cache. This ensures
+// cached reads and invalid requests do not consume the user's generation cap.
+export function enforceLlmLimit(req, res) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (allowed) => {
+      if (settled) return;
+      settled = true;
+      res.off('finish', onFinished);
+      res.off('close', onClosed);
+      resolve(allowed);
+    };
+    const onFinished = () => finish(false);
+    const onClosed = () => finish(false);
+
+    res.once('finish', onFinished);
+    res.once('close', onClosed);
+    llmLimiter(req, res, (err) => {
+      if (settled) return;
+      if (err) {
+        settled = true;
+        res.off('finish', onFinished);
+        res.off('close', onClosed);
+        reject(err);
+        return;
+      }
+      finish(true);
+    });
+  });
+}

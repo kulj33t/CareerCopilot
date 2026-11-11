@@ -91,7 +91,7 @@ function LoadingState({ message }) {
         className="mono"
         style={{ color: 'var(--lime)', letterSpacing: '0.15em', fontSize: 12, marginBottom: 12 }}
       >
-        GEMINI · PLANNING
+        BUILDING YOUR PLAN
       </div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, marginBottom: 8 }}>
         {message}
@@ -264,13 +264,13 @@ function formatInterviewDate(dateLike) {
 
 export default function PrepPlan() {
   const dispatch = useDispatch();
-  const { plan, loading, regenerating, error } = useSelector((s) => s.prep);
+  const { plan, loading, regenerating, error, loaded } = useSelector((s) => s.prep);
   const [selectedDay, setSelectedDay] = useState(null);
   const [configOpen, setConfigOpen] = useState(false);
 
   useEffect(() => {
-    if (!plan && !loading) dispatch(fetchPrepPlan());
-  }, [dispatch, plan, loading]);
+    if (!loaded && !plan && !loading && !error) dispatch(fetchPrepPlan());
+  }, [dispatch, plan, loading, error, loaded]);
 
   useEffect(() => {
     if (!plan || selectedDay !== null) return;
@@ -296,20 +296,36 @@ export default function PrepPlan() {
     return (
       <>
         <TopBar searchPlaceholder="Search…" />
-        <div style={{ padding: 80, textAlign: 'center' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, marginBottom: 12 }}>
-            Couldn&apos;t load your plan
-          </div>
-          <p style={{ color: 'var(--danger)', fontSize: 14, marginBottom: 24 }}>{error.message}</p>
-          <button className="btn btn-primary" onClick={() => dispatch(fetchPrepPlan())}>
-            Retry
+        <section className="prep-error-state" role="alert">
+          <span className="prep-error-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 8v4m0 4h.01M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3l-7.5-13.1a2 2 0 0 0-3.4 0Z" /></svg>
+          </span>
+          <p className="match-state-kicker">PLAN TEMPORARILY UNAVAILABLE</p>
+          <h1>We couldn’t build your plan right now.</h1>
+          <p>Your preferences are saved. Give it a moment, then try again.</p>
+          <button className="btn btn-primary" disabled={loading} onClick={() => dispatch(fetchPrepPlan())}>
+            {loading ? 'Trying again…' : 'Try again'}
+          </button>
+        </section>
+      </>
+    );
+  }
+
+  if (!plan) {
+    return (
+      <>
+        <TopBar searchPlaceholder="Search…" />
+        <div className="prep-empty-state">
+          <p className="match-state-kicker">YOUR NEXT STEP</p>
+          <h1>No study plan yet.</h1>
+          <p>Create a practical seven day plan and adjust it as your priorities change.</p>
+          <button className="btn btn-primary" disabled={regenerating} onClick={() => dispatch(regeneratePrepPlan({}))}>
+            {regenerating ? 'Creating plan…' : 'Create a study plan'}
           </button>
         </div>
       </>
     );
   }
-
-  if (!plan) return null;
 
   const currentDay = selectedDay ?? 0;
   const tasksForDay = plan.tasks.filter((t) => t.day === currentDay);
@@ -414,7 +430,7 @@ export default function PrepPlan() {
         </div>
 
         {error && (
-          <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error.message}</p>
+          <p className="prep-inline-error" role="alert">We couldn’t save that update. Please try again.</p>
         )}
 
         <div className="task-list">

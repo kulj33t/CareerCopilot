@@ -1,7 +1,6 @@
-import { generateStructured, SchemaType } from './llm.js';
+import { generateStructured, GROQ_MODEL as MODEL, SchemaType } from './llm.js';
 import { PrepPlan } from '../models/PrepPlan.js';
 
-const MODEL = 'llama-3.3-70b-versatile';
 
 // Whitelist of reference-URL prefixes we accept from the LLM. Everything else
 // is dropped so we never surface a hallucinated link to the user.
@@ -127,7 +126,7 @@ function clampDay(d) {
 }
 
 /**
- * Calls Gemini to produce the raw plan, then persists it (upsert keyed by
+ * Calls the configured AI provider to produce the raw plan, then persists it (upsert keyed by
  * userId). One plan per user at a time — regeneration overwrites.
  */
 export async function generatePrepPlan({

@@ -9,28 +9,41 @@ function asRejection(err) {
   return { message: err?.message || 'Request failed' };
 }
 
-export const fetchPrepPlan = createAsyncThunk('prep/fetch', async (_, thunkApi) => {
-  try {
-    return await prepPlanApi.get();
-  } catch (err) {
-    return thunkApi.rejectWithValue(asRejection(err));
+function ensurePlan(plan) {
+  if (plan == null) return null;
+  if (typeof plan !== 'object' || !Array.isArray(plan.tasks)) {
+    throw new ApiError('The service returned an incomplete study plan. Please try again later.');
   }
-});
+  return plan;
+}
+
+export const fetchPrepPlan = createAsyncThunk(
+  'prep/fetch',
+  async (_, thunkApi) => {
+    try {
+      return ensurePlan(await prepPlanApi.get());
+    } catch (err) {
+      return thunkApi.rejectWithValue(asRejection(err));
+    }
+  },
+  { condition: (_, { getState }) => !getState().prep.loading }
+);
 
 export const regeneratePrepPlan = createAsyncThunk(
   'prep/regenerate',
   async (payload, thunkApi) => {
     try {
-      return await prepPlanApi.regenerate(payload || {});
+      return ensurePlan(await prepPlanApi.regenerate(payload || {}));
     } catch (err) {
       return thunkApi.rejectWithValue(asRejection(err));
     }
-  }
+  },
+  { condition: (_, { getState }) => !getState().prep.regenerating }
 );
 
 export const toggleTask = createAsyncThunk('prep/toggleTask', async (taskId, thunkApi) => {
   try {
-    return await prepPlanApi.toggleTask(taskId);
+    return ensurePlan(await prepPlanApi.toggleTask(taskId));
   } catch (err) {
     return thunkApi.rejectWithValue(asRejection(err));
   }
@@ -38,6 +51,7 @@ export const toggleTask = createAsyncThunk('prep/toggleTask', async (taskId, thu
 
 const initialState = {
   plan: null,           // full plan from server, or null before first fetch
+  loaded: false,        // prevents a successful empty response from auto-fetching repeatedly
   loading: false,       // initial GET (may include generation on first visit)
   regenerating: false,  // regenerate POST in flight
   error: null,
@@ -59,10 +73,12 @@ const prepSlice = createSlice({
       })
       .addCase(fetchPrepPlan.fulfilled, (state, action) => {
         state.loading = false;
+        state.loaded = true;
         state.plan = action.payload;
       })
       .addCase(fetchPrepPlan.rejected, (state, action) => {
         state.loading = false;
+        state.loaded = true;
         state.error = action.payload || { message: 'Failed to load prep plan' };
       })
 

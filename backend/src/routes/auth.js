@@ -5,6 +5,7 @@ import { authLimiter } from '../middleware/rateLimit.js';
 import {
   AUTH_COOKIE_NAME,
   authCookieOptions,
+  clearAuthCookie,
   comparePassword,
   hashPassword,
   signAuthToken,
@@ -80,7 +81,7 @@ authRouter.post('/login', authLimiter, requireDatabase, async (req, res, next) =
 });
 
 authRouter.post('/logout', (req, res) => {
-  res.clearCookie(AUTH_COOKIE_NAME, { ...authCookieOptions(), maxAge: undefined });
+  clearAuthCookie(res);
   res.json({ ok: true });
 });
 
@@ -115,13 +116,12 @@ function finishOAuth(provider) {
   return async (req, res, next) => {
     try {
       const { code, state, error: providerError } = req.query;
+      const cookieState = req.cookies?.[OAUTH_STATE_COOKIE];
+      res.clearCookie(OAUTH_STATE_COOKIE, { ...stateCookieOptions(), maxAge: undefined });
 
       if (providerError) {
         return res.redirect(`${env.PUBLIC_APP_URL}/auth?oauth_error=${encodeURIComponent(String(providerError))}`);
       }
-
-      const cookieState = req.cookies?.[OAUTH_STATE_COOKIE];
-      res.clearCookie(OAUTH_STATE_COOKIE, { ...stateCookieOptions(), maxAge: undefined });
 
       if (!code || !state || !cookieState || state !== cookieState) {
         return res.redirect(`${env.PUBLIC_APP_URL}/auth?oauth_error=invalid_state`);
@@ -132,6 +132,12 @@ function finishOAuth(provider) {
 
       let user = await User.findOne({ provider, providerId: profile.providerId });
       if (!user) {
+        // Only use an email address to link/create a different account when
+        // the provider explicitly marks it verified. Existing provider IDs
+        // remain usable even when the provider omits its optional email claim.
+        if (!profile.email || !profile.emailVerified) {
+          return res.redirect(`${env.PUBLIC_APP_URL}/auth?oauth_error=email_unverified`);
+        }
         user = await User.findOne({ email: profile.email });
         if (user) {
           user.provider = provider;
@@ -153,7 +159,8 @@ function finishOAuth(provider) {
       res.cookie(AUTH_COOKIE_NAME, signAuthToken(user._id), cookieOpts);
       res.redirect(`${env.PUBLIC_APP_URL}/dashboard`);
     } catch (err) {
-      const msg = err?.message ? encodeURIComponent(err.message.slice(0, 140)) : 'oauth_failed';
+      console.error(`[oauth] ${provider} callback failed (${err?.status || 'unknown'})`);
+      const msg = err?.status === 504 ? 'provider_timeout' : 'provider_failed';
       res.redirect(`${env.PUBLIC_APP_URL}/auth?oauth_error=${msg}`);
     }
   };

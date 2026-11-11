@@ -1,9 +1,8 @@
-import { generateStructured, SchemaType } from './llm.js';
+import { generateStructured, GROQ_MODEL as MODEL, SchemaType } from './llm.js';
 import { InterviewSession } from '../models/InterviewSession.js';
 
-const MODEL = 'llama-3.3-70b-versatile';
 
-// ─── Schemas for Gemini structured output ────────────────────────────
+// ─── Structured-output schemas ──────────────────────────────────────
 
 // Opening turn (no user answer yet). AI introduces the interview + first
 // question. Feedback is null.
@@ -227,7 +226,7 @@ function historyToText(messages) {
   return messages
     .map((m) => {
       const who = m.role === 'ai' ? 'INTERVIEWER' : 'CANDIDATE';
-      // Strip HTML tags for the prompt — Gemini doesn't need the markup
+      // Strip HTML tags for the prompt — the model doesn't need the markup
       const clean = String(m.html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
       return `${who}: ${clean}`;
     })
@@ -327,7 +326,7 @@ Produce the report. Be honest and specific — reference concrete things the can
 // ─── Public API ──────────────────────────────────────────────────────
 
 function sanitizeHtml(s) {
-  // Very light allowlist — we trust Gemini output only to the extent the
+  // Very light allowlist — we trust model output only to the extent the
   // system prompt constrains it. Strip <script> and on-* attributes.
   if (typeof s !== 'string') return '';
   return s.replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -366,7 +365,7 @@ export async function startSession({ user, setup }) {
 }
 
 export async function postUserAnswer(session, userAnswer) {
-  // Append the user's message first so it's part of the context Gemini sees.
+  // Append the user's message first so it's part of the model context.
   session.messages.push({ role: 'user', html: userAnswer, feedback: null });
 
   const raw = await generateStructured({

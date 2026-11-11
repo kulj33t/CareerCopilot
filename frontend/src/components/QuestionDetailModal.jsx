@@ -41,7 +41,7 @@ function LoadingState() {
           marginBottom: 10,
         }}
       >
-        GEMINI · THINKING
+        AI · THINKING
       </div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, marginBottom: 4 }}>
         Drafting the model answer…

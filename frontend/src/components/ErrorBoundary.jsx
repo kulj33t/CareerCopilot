@@ -75,22 +75,14 @@ export default class ErrorBoundary extends Component {
             Something <em style={{ color: 'var(--lime)' }}>broke.</em>
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: 15, marginBottom: 10 }}>
-            Sorry — a render error crashed this screen. Your data is safe.
-          </p>
-          <p
-            style={{
-              color: 'var(--text-dim)',
-              fontSize: 12,
-              fontFamily: 'var(--font-mono)',
-              marginBottom: 28,
-              wordBreak: 'break-word',
-            }}
-          >
-            {error.message}
+            This screen ran into a problem. You can try again or return to the home page.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" onClick={this.reset}>
               Try again
+            </button>
+            <button className="btn btn-ghost" onClick={() => window.location.replace('/')}>
+              Go to home
             </button>
             <button className="btn btn-primary" onClick={this.reload}>
               Reload app

@@ -1,8 +1,8 @@
-# CareerCopilot — Frontend
+# CareerCopilot frontend
 
-React 18 + Redux Toolkit + Vite.
+React 18, Redux Toolkit, and Vite application for CareerCopilot.
 
-## Setup
+## Local development
 
 ```bash
 cd frontend
@@ -10,74 +10,23 @@ npm install
 npm run dev
 ```
 
-Opens [http://localhost:5173](http://localhost:5173). The backend must be running on `:4000` — Vite proxies `/api/*` to it (see [`vite.config.js`](vite.config.js)).
+The Vite server opens at `http://localhost:5173` and proxies `/api/*` to the backend at `http://localhost:4000` by default.
 
-## Folder layout
+## API and deployment configuration
 
-```
-src/
-├── main.jsx               Provider + Router + app root
-├── App.jsx                Routes, RequireAuth wrapper, bootstrap /me
-├── index.css              Full design system (one file)
-├── api/                   Thin fetch wrappers, one per domain
-│   ├── client.js          credentials-include fetch + ApiError
-│   ├── auth.js
-│   ├── resumes.js
-│   ├── jdMatch.js
-│   ├── questions.js
-│   ├── prepPlan.js
-│   ├── interview.js
-│   └── dashboard.js
-├── store/
-│   ├── index.js           configureStore + persistence wiring
-│   ├── persistence.js     debounced localStorage for a tiny subset
-│   └── slices/
-│       ├── authSlice.js
-│       ├── userSlice.js   (holds dashboard data)
-│       ├── resumeSlice.js
-│       ├── jdSlice.js
-│       ├── questionsSlice.js
-│       ├── prepSlice.js
-│       └── interviewSlice.js
-├── components/
-│   ├── AppLayout.jsx      sidebar + outlet
-│   ├── Sidebar.jsx
-│   ├── TopBar.jsx
-│   ├── UserMenu.jsx       avatar dropdown with logout
-│   ├── RequireAuth.jsx    route guard
-│   ├── BrandMark.jsx
-│   └── SearchIcon.jsx
-├── pages/                 One per route
-│   ├── Landing.jsx
-│   ├── Auth.jsx
-│   ├── Dashboard.jsx
-│   ├── ResumeUpload.jsx
-│   ├── ResumeResults.jsx
-│   ├── JDMatch.jsx
-│   ├── QuestionBank.jsx
-│   ├── PrepPlan.jsx
-│   ├── InterviewSetup.jsx
-│   ├── InterviewChat.jsx
-│   └── Report.jsx
-└── data/
-    └── mockData.js        The QB_FILTERS list (only thing left from the mock era)
-```
+- `VITE_API_PROXY_TARGET` changes the backend used by the local Vite dev and preview proxy. Keep this pointed at the local API for local development.
+- `VITE_API_BASE_URL` is optional. Leave it blank to use the same-origin `/api` proxy. Direct backend mode is only for deployments that do not use OAuth; the current OAuth callback flow requires the same-origin proxy.
+- Vercel's `/api/*` rewrite targets the custom Render domain in [`vercel.json`](vercel.json), followed by an SPA fallback so refreshed app routes continue to load.
 
-## State flow
+## Authentication and routing
 
-- **Auth is server-sourced.** On app mount, `bootstrapAuth()` calls `GET /api/auth/me` to rehydrate the user from the cookie. We don't persist auth state to localStorage.
-- **Almost everything else is also server-sourced.** Each slice fetches via a thunk on the page that needs it.
-- **LocalStorage only persists the JD draft text.** Everything else — resume list, questions, prep plan, interview session, dashboard — is authoritative on the server.
-- **Protected routes** use `<RequireAuth />` which waits for `bootstrapped === true` then either renders or redirects to `/auth`.
+- Auth state is restored from the HTTP-only session cookie through `GET /api/auth/me`; it is not stored in local storage.
+- A protected API `401` clears private client state, sends the user to login, and preserves the intended return route.
+- Vercel serves the SPA for direct links and refreshes; unknown client routes show an in-app 404 with a home link.
+- Local storage is used only for the job-description draft.
 
-## Scripts
+## Checks
 
 ```bash
-npm run dev      # Vite dev server with HMR
-npm run build    # Production build to dist/
-npm run preview  # Local preview of the prod build
+npm run build
 ```
-
-## Proxy config
-
-The browser always calls `/api/*` on its own origin. Vite proxies that path to `http://localhost:4000` in development and preview; `vercel.json` proxies it to Render in production. This keeps the session cookie first-party in both environments.

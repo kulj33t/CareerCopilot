@@ -1,5 +1,5 @@
 import { User } from '../models/User.js';
-import { AUTH_COOKIE_NAME, verifyAuthToken } from '../services/auth.js';
+import { AUTH_COOKIE_NAME, clearAuthCookie, verifyAuthToken } from '../services/auth.js';
 import { dbStatus } from '../config/db.js';
 
 // Attaches req.user if a valid auth cookie is present; 401s otherwise.
@@ -10,7 +10,10 @@ export async function requireAuth(req, res, next) {
     if (!token) return res.status(401).json({ error: { message: 'Not authenticated' } });
 
     const payload = verifyAuthToken(token);
-    if (!payload?.sub) return res.status(401).json({ error: { message: 'Invalid session' } });
+    if (!payload?.sub) {
+      clearAuthCookie(res);
+      return res.status(401).json({ error: { message: 'Your session has expired. Please sign in again.' } });
+    }
 
     if (dbStatus() !== 'connected') {
       return res.status(503).json({
@@ -19,7 +22,10 @@ export async function requireAuth(req, res, next) {
     }
 
     const user = await User.findById(payload.sub);
-    if (!user) return res.status(401).json({ error: { message: 'User no longer exists' } });
+    if (!user) {
+      clearAuthCookie(res);
+      return res.status(401).json({ error: { message: 'This account is no longer available. Please sign in again.' } });
+    }
 
     req.user = user;
     next();

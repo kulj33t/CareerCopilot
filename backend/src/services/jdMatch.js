@@ -1,7 +1,6 @@
-import { generateStructured, SchemaType } from './llm.js';
+import { generateStructured, GROQ_MODEL as MODEL, SchemaType } from './llm.js';
 import { extractTextFromResume } from './textExtract.js';
 
-const MODEL = 'llama-3.3-70b-versatile';
 const MAX_JD_CHARS = 8_000;
 const MAX_RESUME_CHARS = 10_000;
 

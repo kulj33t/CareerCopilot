@@ -1,0 +1,17 @@
+# Local operating-system files and build artifacts
+.DS_Store
+**/.DS_Store
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.log
+**/*.log
+
+# Local secrets/configuration; keep only the blank templates in Git
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example

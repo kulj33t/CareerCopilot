@@ -49,6 +49,9 @@ export const logout = createAsyncThunk('auth/logout', async (_, thunkApi) => {
     await authApi.logout();
     return true;
   } catch (err) {
+    // The server intentionally allows logout without a valid session, but a
+    // 401 still means there is no usable session left to revoke.
+    if (err instanceof ApiError && err.status === 401) return true;
     return thunkApi.rejectWithValue(asRejection(err));
   }
 });
@@ -64,6 +67,7 @@ const initialState = {
   bootstrapVersion: null,
   bootstrapRequestId: null,
   authRequestId: null,
+  sessionExpired: false,
 };
 
 const authSlice = createSlice({
@@ -72,6 +76,18 @@ const authSlice = createSlice({
   reducers: {
     clearAuthError(state) {
       state.error = null;
+    },
+    sessionExpired(state) {
+      state.sessionVersion += 1;
+      state.user = null;
+      state.bootstrapped = true;
+      state.submitting = false;
+      state.error = null;
+      state.sessionError = null;
+      state.sessionExpired = true;
+      state.bootstrapVersion = null;
+      state.bootstrapRequestId = null;
+      state.authRequestId = null;
     },
   },
   extraReducers: (builder) => {
@@ -90,6 +106,7 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.bootstrapped = true;
         state.sessionError = null;
+        state.sessionExpired = false;
         state.bootstrapVersion = null;
         state.bootstrapRequestId = null;
       })
@@ -120,6 +137,7 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.bootstrapped = true;
         state.sessionError = null;
+        state.sessionExpired = false;
         state.authRequestId = null;
       })
       .addCase(signup.rejected, (state, action) => {
@@ -145,6 +163,7 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.bootstrapped = true;
         state.sessionError = null;
+        state.sessionExpired = false;
         state.authRequestId = null;
       })
       .addCase(login.rejected, (state, action) => {
@@ -181,5 +200,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearAuthError } = authSlice.actions;
+export const { clearAuthError, sessionExpired: markSessionExpired } = authSlice.actions;
 export default authSlice.reducer;

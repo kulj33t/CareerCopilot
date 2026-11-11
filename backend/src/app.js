@@ -15,6 +15,9 @@ export function buildApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // Render terminates TLS at its proxy and forwards the client address. Trust
+  // only that nearest proxy so rate limits use the real client IP in prod.
+  if (env.NODE_ENV === 'production') app.set('trust proxy', 1);
 
   app.use(requestId);
 
@@ -27,12 +30,24 @@ export function buildApp() {
 
   app.use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin(origin, callback) {
+        if (!origin || env.CORS_ORIGIN.includes(origin)) return callback(null, true);
+        const error = Object.assign(new Error('Origin is not allowed by CORS'), { status: 403 });
+        return callback(error);
+      },
       credentials: true,
+      exposedHeaders: ['X-Request-Id', 'Retry-After', 'RateLimit', 'RateLimit-Policy'],
     })
   );
   app.use(express.json({ limit: '1mb' }));
-  app.use(cookieParser(env.COOKIE_SECRET));
+  app.use(cookieParser());
+
+  // API payloads include account-specific data and must never be replayed from
+  // a browser, CDN, or Vercel proxy cache after an account/session changes.
+  app.use('/api', (_req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
 
   if (env.NODE_ENV !== 'test') {
     app.use(

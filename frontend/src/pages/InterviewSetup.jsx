@@ -11,10 +11,20 @@ import {
 } from '../store/slices/interviewSlice.js';
 
 const modes = [
-  { id: 'text', icon: '💬', title: 'Text', body: 'Type your answers. Best for DSA and coding.', pill: 'Most accurate', pillStyle: '' },
-  { id: 'voice', icon: '🎙️', title: 'Voice', body: 'Speak out loud. Get filler-word and pacing analysis.', pill: 'Recommended', pillStyle: 'pill-lime' },
-  { id: 'video', icon: '📹', title: 'Video', body: 'Full video simulation with posture analysis.', pill: 'Coming v2', pillStyle: 'pill-cream', disabled: true },
+  { id: 'text', icon: 'text', title: 'Text', body: 'Type your answers. Best for DSA and coding.', note: 'Most accurate' },
+  { id: 'voice', icon: 'voice', title: 'Voice', body: 'Speak out loud. Get filler-word and pacing analysis.', note: 'Recommended' },
+  { id: 'video', icon: 'video', title: 'Video', body: 'Full video simulation with posture analysis.', note: 'Coming v2', disabled: true },
 ];
+
+function ModeIcon({ name }) {
+  if (name === 'text') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.75A2.75 2.75 0 0 1 7.75 3h8.5A2.75 2.75 0 0 1 19 5.75v7.5A2.75 2.75 0 0 1 16.25 16H11l-4.5 4v-4.4A2.75 2.75 0 0 1 5 13.25z" /><path d="M9 8h6m-6 3.5h4" /></svg>;
+  }
+  if (name === 'voice') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4m-3.5 0h7" /></svg>;
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m10 9 5 3-5 3z" /></svg>;
+}
 
 const roles = [
   { id: 'sde', title: 'SDE / Full-Stack', body: 'General software engineering' },
@@ -120,7 +130,7 @@ export default function InterviewSetup() {
               marginTop: 24,
               padding: '16px 20px',
               borderRadius: 14,
-              background: 'rgba(250, 82, 15, 0.06)',
+              background: 'var(--lime-glow)',
               border: '1px solid var(--lime-dim)',
               display: 'flex',
               justifyContent: 'space-between',
@@ -168,10 +178,10 @@ export default function InterviewSetup() {
               style={m.disabled ? { opacity: 0.5 } : undefined}
               onClick={() => !m.disabled && set('mode')(m.id)}
             >
-              <div className="mode-icon">{m.icon}</div>
+              <div className={`mode-icon mode-icon-${m.icon}`}><ModeIcon name={m.icon} /></div>
               <h4>{m.title}</h4>
               <p>{m.body}</p>
-              <div className={`pill ${m.pillStyle}`.trim()}>{m.pill}</div>
+              <span className="mode-note">{m.note}</span>
             </div>
           ))}
         </div>

@@ -3,10 +3,31 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { useDispatch, useSelector } from "react-redux";
 import { clearAuthError, login, signup } from "../store/slices/authSlice.js";
 import { authApi } from "../api/auth.js";
-import { API_BASE } from "../api/client.js";
 import BrandMark from "../components/BrandMark.jsx";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const OAUTH_ERROR_MESSAGES = {
+  access_denied: 'Sign-in was cancelled. You can try again whenever you’re ready.',
+  invalid_state: 'We couldn’t verify that sign-in attempt. Please try again.',
+  provider_timeout: 'The sign-in provider took too long to respond. Please try again.',
+  provider_failed: 'We couldn’t complete sign-in with that provider. Please try again.',
+  email_unverified: 'Your provider did not share a verified email. Use email sign-in or try another provider.',
+};
+
+function safeReturnTo(value) {
+  const isInternalPath = (path) =>
+    typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/auth');
+
+  if (typeof value === 'string') return isInternalPath(value) ? value : '/dashboard';
+  if (value && typeof value === 'object' && isInternalPath(value.pathname)) {
+    return {
+      pathname: value.pathname,
+      search: typeof value.search === 'string' && value.search.startsWith('?') ? value.search : '',
+      hash: typeof value.hash === 'string' && value.hash.startsWith('#') ? value.hash : '',
+    };
+  }
+  return '/dashboard';
+}
 
 function validate(form, mode) {
   const errors = {};
@@ -25,10 +46,14 @@ export default function Auth() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const submitting = useSelector((s) => s.auth.submitting);
   const serverError = useSelector((s) => s.auth.error);
+  const user = useSelector((s) => s.auth.user);
 
-  const [mode, setMode] = useState("signup");
+  const [mode, setMode] = useState(() =>
+    searchParams.get("mode") === "login" ? "login" : "signup",
+  );
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
@@ -36,7 +61,6 @@ export default function Auth() {
     google: false,
     linkedin: false,
   });
-  const [searchParams, setSearchParams] = useSearchParams();
   const oauthError = searchParams.get("oauth_error");
 
   useEffect(() => {
@@ -51,6 +75,15 @@ export default function Auth() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const nextMode = searchParams.get('mode') === 'login' ? 'login' : 'signup';
+    setMode((currentMode) => currentMode === nextMode ? currentMode : nextMode);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (user) navigate(safeReturnTo(location.state?.from), { replace: true });
+  }, [user, navigate, location.state]);
 
   useEffect(() => {
     if (oauthError) {
@@ -90,13 +123,19 @@ export default function Auth() {
     const thunk = mode === "signup" ? signup : login;
     const result = await dispatch(thunk(form));
     if (thunk.fulfilled.match(result)) {
-      navigate(location.state?.from || "/dashboard", { replace: true });
+      navigate(safeReturnTo(location.state?.from), { replace: true });
     }
   };
 
   const switchMode = (e) => {
     e.preventDefault();
-    setMode((m) => (m === "signup" ? "login" : "signup"));
+    const nextMode = mode === "signup" ? "login" : "signup";
+    setMode(nextMode);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("mode", nextMode);
+      return next;
+    }, { replace: true });
     setTouched({});
     setErrors({});
     if (serverError) dispatch(clearAuthError());
@@ -107,82 +146,27 @@ export default function Auth() {
   return (
     <div className="auth-wrap">
       <div className="auth-visual">
-        <div className="auth-visual-content">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <BrandMark />
-            <strong>CareerCopilot</strong>
+        <div className="auth-visual-content auth-brand-row">
+          <Link to="/" className="auth-brand-link" aria-label="CareerCopilot home">
+            <div className="auth-brand-lockup">
+              <BrandMark />
+              <strong>CareerCopilot</strong>
+            </div>
+          </Link>
+        </div>
+        <div className="auth-visual-copy">
+          <p className="auth-eyebrow">CAREER PREPARATION</p>
+          <h1 className="auth-quote">Make your next move <em>with confidence.</em></h1>
+          <p className="auth-visual-description">
+            A focused workspace to improve your resume, prepare for interviews, and decide what to work on next.
+          </p>
+          <div className="auth-benefits">
+            <div><span>01</span><p><strong>See your strengths</strong><small>Get clear feedback on your resume.</small></p></div>
+            <div><span>02</span><p><strong>Focus on the role</strong><small>Understand where your skills align.</small></p></div>
+            <div><span>03</span><p><strong>Practice with direction</strong><small>Build confidence one session at a time.</small></p></div>
           </div>
         </div>
-        <div style={{ position: "relative", zIndex: 2 }}>
-          <div className="auth-quote">
-            Ace every
-            <br />
-            <em>interview.</em>
-          </div>
-
-          {/* Mock interview chat card */}
-          <div className="auth-product-card">
-            {/* Card header */}
-            <div className="auth-card-header">
-              <div>
-                <div className="auth-card-label">Mock Interview</div>
-                <div className="auth-card-filename">
-                  Software Engineer · System Design
-                </div>
-              </div>
-              <div className="auth-session-badge">● Live</div>
-            </div>
-
-            {/* AI message */}
-            <div className="auth-msg">
-              <div className="auth-msg-avatar">C</div>
-              <div className="auth-msg-bubble">
-                Walk me through designing a URL shortener at scale — cover
-                storage, hashing, and caching.
-              </div>
-            </div>
-
-            {/* User message */}
-            <div className="auth-msg auth-msg-user">
-              <div className="auth-msg-bubble auth-msg-bubble-user">
-                I'd use a base-62 hash for short codes, store mappings in
-                Postgres with a Redis cache for hot links, and add a CDN layer
-                for global latency…
-              </div>
-              <div className="auth-msg-avatar auth-msg-avatar-user">PT</div>
-            </div>
-
-            {/* Feedback pill */}
-            <div className="auth-card-tip">
-              <span style={{ color: "rgba(255,255,255,0.55)", marginRight: 8 }}>
-                AI Feedback
-              </span>
-              <strong>8.5 / 10</strong>
-              <span style={{ marginLeft: 10, opacity: 0.7 }}>
-                ✓ Structured &nbsp;✓ Deep
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Feature chips */}
-        <div className="auth-feature-list">
-          <div className="auth-chips">
-            {[
-              "⚡ 2,000+ Questions",
-              "📄 AI Resume Scorer",
-              "🎯 JD Fit Analysis",
-              "📈 Prep Plans",
-            ].map((c) => (
-              <span key={c} className="auth-chip">
-                {c}
-              </span>
-            ))}
-          </div>
-          <div className="auth-feature-footer">
-            Free forever · No credit card · Built for India
-          </div>
-        </div>
+        <p className="auth-visual-note">Less noise. Clearer next steps.</p>
       </div>
 
       <div className="auth-form-wrap">
@@ -196,6 +180,12 @@ export default function Auth() {
               ? "Free forever. No credit card required."
               : "Sign in to pick up where you left off."}
           </p>
+
+          {location.state?.reason === 'session-expired' && (
+            <p role="status" style={{ color: 'var(--lime)', fontSize: 13, margin: '12px 0 0' }}>
+              Your session expired. Sign in again to continue where you left off.
+            </p>
+          )}
 
           {isSignup && (
             <div className="input-group">
@@ -295,7 +285,7 @@ export default function Auth() {
                 textAlign: "center",
               }}
             >
-              Sign-in failed: {decodeURIComponent(oauthError)}
+              {OAUTH_ERROR_MESSAGES[oauthError] || 'We couldn’t complete sign-in. Please try again.'}
             </p>
           )}
 
@@ -305,7 +295,7 @@ export default function Auth() {
               <div className="auth-oauth">
                 {providers.google && (
                   <a
-                    href={`${API_BASE}/api/auth/google`}
+                    href="/api/auth/google"
                     className="btn btn-ghost"
                   >
                     Google
@@ -313,7 +303,7 @@ export default function Auth() {
                 )}
                 {providers.linkedin && (
                   <a
-                    href={`${API_BASE}/api/auth/linkedin`}
+                    href="/api/auth/linkedin"
                     className="btn btn-ghost"
                   >
                     LinkedIn
@@ -323,19 +313,13 @@ export default function Auth() {
             </>
           )}
 
-          <p
-            style={{
-              marginTop: 32,
-              fontSize: 13,
-              color: "var(--text-muted)",
-              textAlign: "center",
-            }}
-          >
+          <p className="auth-mode-switch">
             {isSignup ? "Already have an account? " : "New here? "}
             <Link to="#" onClick={switchMode} style={{ color: "var(--lime)" }}>
               {isSignup ? "Sign in" : "Create an account"}
             </Link>
           </p>
+          <p className="auth-home-row"><Link to="/">Back to home</Link></p>
         </form>
       </div>
     </div>

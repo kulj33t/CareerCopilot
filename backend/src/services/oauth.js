@@ -15,7 +15,7 @@ const PROVIDERS = {
     clientSecret: () => env.GOOGLE_CLIENT_SECRET,
     mapProfile: (p) => ({
       providerId: String(p.sub),
-      email: p.email?.toLowerCase(),
+      email: p.email?.trim().toLowerCase(),
       emailVerified: p.email_verified === true,
       name: p.name || p.given_name || (p.email ? p.email.split('@')[0] : 'User'),
       avatarUrl: p.picture || null,
@@ -33,13 +33,45 @@ const PROVIDERS = {
     clientSecret: () => env.LINKEDIN_CLIENT_SECRET,
     mapProfile: (p) => ({
       providerId: String(p.sub),
-      email: p.email?.toLowerCase(),
+      email: p.email?.trim().toLowerCase(),
       emailVerified: p.email_verified === true,
       name: p.name || [p.given_name, p.family_name].filter(Boolean).join(' ') || 'User',
       avatarUrl: p.picture || null,
     }),
   },
 };
+
+const PROVIDER_TIMEOUT_MS = 12_000;
+
+async function fetchProviderJson(url, options, label) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const text = await response.text();
+    if (!response.ok) {
+      const error = new Error(`${label} failed (${response.status})`);
+      error.status = 502;
+      throw error;
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      const error = new Error(`${label} returned an unreadable response`);
+      error.status = 502;
+      throw error;
+    }
+  } catch (error) {
+    if (controller.signal.aborted) {
+      const timeoutError = new Error(`${label} timed out`);
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export function getProvider(name) {
   const p = PROVIDERS[name];
@@ -82,7 +114,7 @@ export function buildAuthorizeUrl(name, state) {
 export async function exchangeCodeForProfile(name, code) {
   const p = getProvider(name);
 
-  const tokenRes = await fetch(p.tokenUrl, {
+  const token = await fetchProviderJson(p.tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -92,14 +124,7 @@ export async function exchangeCodeForProfile(name, code) {
       client_id: p.clientId(),
       client_secret: p.clientSecret(),
     }),
-  });
-  if (!tokenRes.ok) {
-    const text = await tokenRes.text();
-    const err = new Error(`OAuth token exchange failed (${name}): ${text.slice(0, 200)}`);
-    err.status = 502;
-    throw err;
-  }
-  const token = await tokenRes.json();
+  }, `${name} token exchange`);
   const accessToken = token.access_token;
   if (!accessToken) {
     const err = new Error(`OAuth token response missing access_token (${name})`);
@@ -107,19 +132,12 @@ export async function exchangeCodeForProfile(name, code) {
     throw err;
   }
 
-  const userRes = await fetch(p.userinfoUrl, {
+  const profile = await fetchProviderJson(p.userinfoUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!userRes.ok) {
-    const text = await userRes.text();
-    const err = new Error(`OAuth userinfo fetch failed (${name}): ${text.slice(0, 200)}`);
-    err.status = 502;
-    throw err;
-  }
-  const profile = await userRes.json();
+  }, `${name} profile lookup`);
   const mapped = p.mapProfile(profile);
-  if (!mapped.email) {
-    const err = new Error(`${name} did not return an email — cannot create account`);
+  if (!profile.sub) {
+    const err = new Error(`${name} did not return an account identifier`);
     err.status = 400;
     throw err;
   }
@@ -137,8 +155,8 @@ export function newStateNonce() {
 export function stateCookieOptions() {
   const isSecureDeployment =
     env.NODE_ENV === 'production' || env.PUBLIC_APP_URL.startsWith('https://');
-  // The OAuth callback is a top-level GET navigation back to this same origin,
-  // so Lax sends the state cookie while keeping it out of cross-site requests.
+    // The callback is a top-level GET and Lax keeps the nonce cookie out of
+    // cross-site subrequests while sending it back during the OAuth redirect.
   return {
     httpOnly: true,
     sameSite: 'lax',
