@@ -51,7 +51,7 @@ const schema = z.object({
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
   console.error('[env] invalid environment variables:');
-  console.error(JSON.stringify(parsed.error.format(), null, 2));
+  console.error(JSON.stringify(z.treeifyError(parsed.error), null, 2));
   process.exit(1);
 }
 

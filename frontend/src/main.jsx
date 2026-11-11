@@ -8,8 +8,10 @@ import { store } from './store/index.js';
 import './index.css';
 
 // Apply stored theme synchronously before first paint to avoid flash
+document.documentElement.setAttribute('data-theme', 'light');
 try {
-  const t = localStorage.getItem('career-copilot-theme-tokyo-night-v1') || 'dark';
+  const storedTheme = localStorage.getItem('career-copilot-theme-preference-v2');
+  const t = storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : 'light';
   document.documentElement.setAttribute('data-theme', t);
 } catch {}
 

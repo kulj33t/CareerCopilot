@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
 
-const KEY = 'career-copilot-theme-tokyo-night-v1';
+const KEY = 'career-copilot-theme-preference-v2';
 
 function getStored() {
-  try { return localStorage.getItem(KEY) || 'dark'; } catch { return 'dark'; }
+  try {
+    const stored = localStorage.getItem(KEY);
+    return stored === 'dark' || stored === 'light' ? stored : 'light';
+  } catch {
+    return 'light';
+  }
 }
 
 export function useTheme() {

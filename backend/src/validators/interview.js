@@ -9,5 +9,5 @@ export const setupSchema = z.object({
 });
 
 export const sendMessageSchema = z.object({
-  text: z.string().trim().min(1, 'Answer is empty').max(4000, 'Answer is too long'),
+  text: z.string().trim().min(1, { error: 'Answer is empty' }).max(4000, { error: 'Answer is too long' }),
 });
