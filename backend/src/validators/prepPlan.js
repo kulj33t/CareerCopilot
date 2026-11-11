@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-// Body accepted on POST /regenerate. All fields optional — sensible defaults
-// kick in when missing.
 export const prepPlanInputSchema = z.object({
   targetRole: z.string().trim().min(1).max(120).optional(),
   experience: z.enum(['fresher', 'early', 'mid', 'senior']).optional(),

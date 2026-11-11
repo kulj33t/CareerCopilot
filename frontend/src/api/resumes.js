@@ -8,7 +8,7 @@ async function uploadResume(file) {
 
   const res = await fetch(`${API_BASE}/api/resumes`, {
     method: 'POST',
-    credentials: 'include',
+    credentials: 'same-origin',
     body: form,
   });
 

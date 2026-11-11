@@ -34,14 +34,13 @@ export function verifyAuthToken(token) {
 }
 
 export function authCookieOptions() {
-  const isProd = env.NODE_ENV === 'production';
+  const isSecureDeployment =
+    env.NODE_ENV === 'production' || env.PUBLIC_APP_URL.startsWith('https://');
   return {
     httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',
-    path: '/',
+    sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: "/",
-    domain: "careercopilot-adh6.onrender.com",
-    secure: true,
+    path: '/',
+    secure: isSecureDeployment,
   };
 }

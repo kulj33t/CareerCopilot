@@ -80,4 +80,4 @@ npm run preview  # Local preview of the prod build
 
 ## Proxy config
 
-`vite.config.js` proxies `/api/*` to `http://localhost:4000`. In production you'd put both services behind the same origin (or configure CORS properly) so auth cookies flow.
+The browser always calls `/api/*` on its own origin. Vite proxies that path to `http://localhost:4000` in development and preview; `vercel.json` proxies it to Render in production. This keeps the session cookie first-party in both environments.

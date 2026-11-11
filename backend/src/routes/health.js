@@ -16,8 +16,8 @@ healthRouter.get('/', (req, res) => {
   const ai = isLlmConfigured() ? 'configured' : 'not_configured';
   const storage = isCloudinaryConfigured() ? 'configured' : 'not_configured';
 
-  // Overall 200/503: 200 if DB is at least reachable, else 503.
-  const dbHealthy = db === 'connected' || db === 'not_configured';
+  // This app's user-facing routes require MongoDB, so missing configuration is unhealthy too.
+  const dbHealthy = db === 'connected';
   const status = dbHealthy ? 200 : 503;
 
   res.status(status).json({

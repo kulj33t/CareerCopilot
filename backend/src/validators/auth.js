@@ -11,7 +11,6 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-// Helper: runs a zod schema on req.body, returns parsed data or throws a 400.
 export function parseBody(schema, body) {
   const result = schema.safeParse(body);
   if (!result.success) {

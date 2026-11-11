@@ -57,10 +57,8 @@ export function isProviderConfigured(name) {
 }
 
 export function redirectUri(name) {
-  // Browser navigations (OAuth callback) must land on the same origin as the SPA
-  // and proxied /api routes (e.g. Vercel → Render). Using PUBLIC_API_URL when it
-  // points at Render would set session cookies on *.onrender.com while the app
-  // runs on *.vercel.app → 401 on /api/auth/me.
+  // OAuth callbacks must land on the SPA origin so the browser stores the
+  // session cookie for that origin. /api is proxied to this service by Vite or Vercel.
   const base = env.PUBLIC_APP_URL.replace(/\/$/, '');
   return `${base}/api/auth/${name}/callback`;
 }
@@ -137,15 +135,14 @@ export function newStateNonce() {
 }
 
 export function stateCookieOptions() {
-  const isProd = env.NODE_ENV === 'production';
-  // OAuth callbacks are top-level navigations from the provider's domain back
-  // to ours, so SameSite=Lax works for the dev case. In prod we still need
-  // SameSite=None;Secure because the cookie was set during a redirect from
-  // our backend and the browser treats the round-trip as cross-site.
+  const isSecureDeployment =
+    env.NODE_ENV === 'production' || env.PUBLIC_APP_URL.startsWith('https://');
+  // The OAuth callback is a top-level GET navigation back to this same origin,
+  // so Lax sends the state cookie while keeping it out of cross-site requests.
   return {
     httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',
-    secure: isProd,
+    sameSite: 'lax',
+    secure: isSecureDeployment,
     maxAge: 10 * 60 * 1000, // 10 minutes — the user must complete OAuth in this window
     path: '/',
   };

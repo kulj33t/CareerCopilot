@@ -32,11 +32,8 @@ const schema = z.object({
   LINKEDIN_CLIENT_ID: z.string().optional(),
   LINKEDIN_CLIENT_SECRET: z.string().optional(),
 
-  // Public URL of the backend, used to build OAuth redirect_uri callbacks.
-  // In dev: http://localhost:4000. In prod: https://your-api.onrender.com.
-  PUBLIC_API_URL: z.string().url().default('http://localhost:4000'),
-  // Public URL of the frontend, where we redirect the user after a successful
-  // OAuth login. In dev: http://localhost:5173.
+  // Public frontend origin. Used for OAuth callbacks and production cookie flags.
+  // In dev: http://localhost:5173. In prod: the Vercel deployment origin.
   PUBLIC_APP_URL: z.string().url().default('http://localhost:5173'),
 });
 

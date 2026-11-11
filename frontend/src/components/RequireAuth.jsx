@@ -1,5 +1,6 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { bootstrapAuth } from '../store/slices/authSlice.js';
 
 // Full-screen loader shown during the initial /api/auth/me bootstrap call.
 // Avoids a flash of the login page for users who already have a valid cookie.
@@ -28,10 +29,41 @@ function AuthLoader() {
 }
 
 export default function RequireAuth() {
-  const { user, bootstrapped } = useSelector((s) => s.auth);
+  const dispatch = useDispatch();
+  const { user, bootstrapped, sessionError } = useSelector((s) => s.auth);
   const location = useLocation();
 
   if (!bootstrapped) return <AuthLoader />;
-  if (!user) return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
-  return <Outlet />;
+  if (user) return <Outlet />;
+
+  if (sessionError) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 24,
+          color: 'var(--text-muted)',
+        }}
+      >
+        <div style={{ maxWidth: 420, textAlign: 'center' }}>
+          <h2 style={{ color: 'var(--text)' }}>Couldn’t verify your session</h2>
+          <p>{sessionError.message || 'Check your connection and try again.'}</p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => dispatch(bootstrapAuth())}
+          >
+            Try again
+          </button>
+          <p style={{ marginTop: 16 }}>
+            <Link to="/auth">Go to sign in</Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
 }

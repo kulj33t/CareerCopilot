@@ -19,8 +19,9 @@ Runs on `http://localhost:4000`. First start seeds 36 interview questions automa
 | Var | Required | Notes |
 |---|---|---|
 | `PORT` | no (default 4000) | |
-| `NODE_ENV` | no (default development) | Switches error-handler verbosity and cookie `secure` flag |
-| `CORS_ORIGIN` | no (default http://localhost:5173) | |
+| `NODE_ENV` | no (default development) | Switches error-handler verbosity and production cookie flags |
+| `CORS_ORIGIN` | no (default http://localhost:5173) | Frontend origin; set to the Vercel origin in Render |
+| `PUBLIC_APP_URL` | no (default http://localhost:5173) | Frontend origin used for OAuth callbacks and secure cookie flags |
 | `MONGODB_URI` | **yes** | Atlas SRV string; include a database name (`/careercopilot`) |
 | `JWT_SECRET` | **yes** | ≥ 16 chars random |
 | `COOKIE_SECRET` | **yes** | ≥ 16 chars random |

@@ -2,7 +2,6 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { authApi } from '../../api/auth.js';
 import { ApiError } from '../../api/client.js';
 
-// Converts an ApiError into a plain object Redux can serialize.
 function asRejection(err) {
   if (err instanceof ApiError) {
     return { message: err.message, status: err.status, details: err.details };
@@ -15,24 +14,23 @@ export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, thunkA
     const { user } = await authApi.me();
     return user;
   } catch (err) {
-    // Not logged in is the expected state for a fresh visitor — not an error.
-    if (err instanceof ApiError && err.status === 401) {
-      // #region agent log
-      try {
-        const diag = await authApi.diag();
-        fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'authSlice.js:bootstrap',message:'bootstrap 401 diag',data:{diag,pageOrigin:typeof location!=='undefined'?location.origin:null},timestamp:Date.now(),hypothesisId:'C-E'})}).catch(()=>{});
-      } catch { /* ignore */ }
-      // #endregion
-      return null;
-    }
+    // A 401 is the normal state for a visitor without a session cookie.
+    if (err instanceof ApiError && err.status === 401) return null;
     return thunkApi.rejectWithValue(asRejection(err));
   }
 });
 
+// Login and signup are complete only after the browser has stored the
+// HttpOnly cookie and the API accepts it on a follow-up /me request.
+async function authenticateWithCookie(request, payload) {
+  await request(payload);
+  const { user } = await authApi.me();
+  return user;
+}
+
 export const signup = createAsyncThunk('auth/signup', async (payload, thunkApi) => {
   try {
-    const { user } = await authApi.signup(payload);
-    return user;
+    return await authenticateWithCookie(authApi.signup, payload);
   } catch (err) {
     return thunkApi.rejectWithValue(asRejection(err));
   }
@@ -40,14 +38,7 @@ export const signup = createAsyncThunk('auth/signup', async (payload, thunkApi) 
 
 export const login = createAsyncThunk('auth/login', async (payload, thunkApi) => {
   try {
-    const { user } = await authApi.login(payload);
-    // #region agent log
-    try {
-      const diag = await authApi.diag();
-      fetch('http://127.0.0.1:7916/ingest/35ecbcca-33a5-4f04-b3c9-d8cb6558a87a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbb595'},body:JSON.stringify({sessionId:'cbb595',location:'authSlice.js:login',message:'post-login diag',data:{diag,pageOrigin:typeof location!=='undefined'?location.origin:null},timestamp:Date.now(),hypothesisId:'C-D'})}).catch(()=>{});
-    } catch { /* ignore */ }
-    // #endregion
-    return user;
+    return await authenticateWithCookie(authApi.login, payload);
   } catch (err) {
     return thunkApi.rejectWithValue(asRejection(err));
   }
@@ -63,10 +54,16 @@ export const logout = createAsyncThunk('auth/logout', async (_, thunkApi) => {
 });
 
 const initialState = {
-  user: null,            // { id, name, email, createdAt } | null
-  bootstrapped: false,   // have we asked the server "who am I?" yet?
-  submitting: false,     // in-flight signup/login/logout
-  error: null,           // last auth error (cleared on next attempt)
+  user: null,
+  bootstrapped: false,
+  submitting: false,
+  error: null,
+  sessionError: null,
+  // A login/signup/logout that starts after /me invalidates that older result.
+  sessionVersion: 0,
+  bootstrapVersion: null,
+  bootstrapRequestId: null,
+  authRequestId: null,
 };
 
 const authSlice = createSlice({
@@ -79,54 +76,107 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(bootstrapAuth.pending, (state) => {
-        state.error = null;
+      .addCase(bootstrapAuth.pending, (state, action) => {
+        state.bootstrapVersion = state.sessionVersion;
+        state.bootstrapRequestId = action.meta.requestId;
+        state.bootstrapped = false;
+        state.sessionError = null;
       })
       .addCase(bootstrapAuth.fulfilled, (state, action) => {
+        if (
+          state.bootstrapRequestId !== action.meta.requestId ||
+          state.bootstrapVersion !== state.sessionVersion
+        ) return;
         state.user = action.payload;
         state.bootstrapped = true;
+        state.sessionError = null;
+        state.bootstrapVersion = null;
+        state.bootstrapRequestId = null;
       })
-      .addCase(bootstrapAuth.rejected, (state) => {
-        state.user = null;
+      .addCase(bootstrapAuth.rejected, (state, action) => {
+        if (
+          state.bootstrapRequestId !== action.meta.requestId ||
+          state.bootstrapVersion !== state.sessionVersion
+        ) return;
+        // A network/server failure is not proof that the user is signed out.
         state.bootstrapped = true;
+        state.sessionError = action.payload || { message: 'Could not verify your session.' };
+        state.bootstrapVersion = null;
+        state.bootstrapRequestId = null;
       })
 
-      .addCase(signup.pending, (state) => {
+      .addCase(signup.pending, (state, action) => {
+        state.sessionVersion += 1;
+        state.bootstrapVersion = null;
+        state.bootstrapRequestId = null;
+        state.authRequestId = action.meta.requestId;
         state.submitting = true;
         state.error = null;
+        state.sessionError = null;
       })
       .addCase(signup.fulfilled, (state, action) => {
+        if (state.authRequestId !== action.meta.requestId) return;
         state.submitting = false;
         state.user = action.payload;
+        state.bootstrapped = true;
+        state.sessionError = null;
+        state.authRequestId = null;
       })
       .addCase(signup.rejected, (state, action) => {
+        if (state.authRequestId !== action.meta.requestId) return;
         state.submitting = false;
+        state.bootstrapped = true;
         state.error = action.payload || { message: 'Signup failed' };
+        state.authRequestId = null;
       })
 
-      .addCase(login.pending, (state) => {
+      .addCase(login.pending, (state, action) => {
+        state.sessionVersion += 1;
+        state.bootstrapVersion = null;
+        state.bootstrapRequestId = null;
+        state.authRequestId = action.meta.requestId;
         state.submitting = true;
         state.error = null;
+        state.sessionError = null;
       })
       .addCase(login.fulfilled, (state, action) => {
+        if (state.authRequestId !== action.meta.requestId) return;
         state.submitting = false;
         state.user = action.payload;
+        state.bootstrapped = true;
+        state.sessionError = null;
+        state.authRequestId = null;
       })
       .addCase(login.rejected, (state, action) => {
+        if (state.authRequestId !== action.meta.requestId) return;
         state.submitting = false;
+        state.bootstrapped = true;
         state.error = action.payload || { message: 'Login failed' };
+        state.authRequestId = null;
       })
 
-      .addCase(logout.pending, (state) => {
+      .addCase(logout.pending, (state, action) => {
+        state.sessionVersion += 1;
+        state.bootstrapVersion = null;
+        state.bootstrapRequestId = null;
+        state.authRequestId = action.meta.requestId;
         state.submitting = true;
+        state.error = null;
+        state.sessionError = null;
       })
-      .addCase(logout.fulfilled, (state) => {
+      .addCase(logout.fulfilled, (state, action) => {
+        if (state.authRequestId !== action.meta.requestId) return;
         state.submitting = false;
         state.user = null;
+        state.bootstrapped = true;
+        state.authRequestId = null;
       })
       .addCase(logout.rejected, (state, action) => {
+        if (state.authRequestId !== action.meta.requestId) return;
         state.submitting = false;
+        state.bootstrapped = true;
         state.error = action.payload || { message: 'Logout failed' };
+        state.authRequestId = null;
       });
   },
 });

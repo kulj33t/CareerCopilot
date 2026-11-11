@@ -27,7 +27,9 @@ const userSchema = new mongoose.Schema(
 
     avatarUrl: { type: String, trim: true, maxlength: 500 },
   },
-  { timestamps: true }
+  // Auth queries should fail quickly if Mongo disconnects instead of waiting
+  // indefinitely in Mongoose's command buffer.
+  { timestamps: true, bufferCommands: false }
 );
 
 userSchema.methods.toPublic = function toPublic() {

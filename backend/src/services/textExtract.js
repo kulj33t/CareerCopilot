@@ -17,10 +17,6 @@ async function fetchBuffer(url) {
   }
 }
 
-/**
- * Downloads the resume file from Cloudinary and returns its plain text.
- * Throws with a user-friendly message if extraction fails.
- */
 export async function extractTextFromResume(resume) {
   const url = getSignedResumeUrl({
     publicId: resume.cloudinaryPublicId,
